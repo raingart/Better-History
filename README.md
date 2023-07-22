@@ -1,8 +1,8 @@
-# Dragon-Better-History
+# Better-History
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://ko-fi.com/dragonofmercy)
+Replace the default browser history with this better history display.
+The fork [approved](https://github.com/dragonofmercy/Dragon-Better-History/issues/29#issuecomment-1642174968) by the original author of the project. For which he is very grateful.
 
-Better history for Microsoft Edge Chromium
 
 ## How to compile less
 
@@ -24,9 +24,3 @@ powershell Get-Content .\src\js\_merge.txt | foreach { Get-Content .\src\js\comp
 ```
 
 If you need to add more javascript file don't forget to add it inside "_merge.txt" file.
-
-## 
-
-If this project help to increase your productivity, you can give me a cup of coffee :) 
-
-[![Donate](https://cdn.ko-fi.com/cdn/kofi2.png?v=3)](https://ko-fi.com/dragonofmercy)
