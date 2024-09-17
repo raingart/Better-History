@@ -1,320 +1,312 @@
 ﻿/**
- * Ion.Calendar v2.1.0
- * Authors: Denis Ineshin, raingart 2024
- * GitHub page:     https://github.com/raingart/ion.calendar
+ * Ion.Calendar v3
+ * GitHub page: https://github.com/raingart/ion.calendar
 */
 
-(function (jQuery) {
-   // Import Moment.js library
-   try {
-      var timeNow = moment();
-   } catch (e) {
-      alert("Can't find Moment.js. Please ensure it's included.");
-      throw new Error("Moment.js not found");
+class IonCalendar {
+   constructor(element, options = {}) {
+      this.element = element;
+      this.settings = {
+         ...this.defaultSettings,
+         ...options
+      };
+
+      this.timeNow = moment();
+      this.timeNowLocal = moment(this.timeNow).locale(this.settings.lang);
+      this.timeSelected = null;
+      this.firstStart = true;
+
+      this.init();
    }
 
-   const CONSTANTS = {
-      DAYS_IN_WEEK: 7,
-      EMPTY_CELL: '&nbsp;',
-   };
+   get defaultSettings() {
+      return {
+         lang: 'en',
+         sundayFirst: false,
+         years: '80',
+         format: '',
+         daysInWeek: 7,
+         emptyCell: '&nbsp;',
+         clickable: true,
+         startDate: '',
+         maxDate: '',
+         hideArrows: false,
+         onClick: null,
+         onReady: null
+      };
+   }
 
-   const methods = {
-      init: function (options) {
-         const defaultSettings = {
-            lang: 'en',
-            sundayFirst: false,
-            years: '80',
-            format: '',
-            clickable: true,
-            startDate: '',
-            maxDate: '',
-            hideArrows: false,
-            onClick: null,
-            onReady: null
-         };
+   init() {
+      if (this.element.dataset.isActive) return;
+      this.element.dataset.isActive = true;
 
-         const settings = { ...defaultSettings, ...options };
+      this.prepareData();
+      this.renderCalendar();
+      this.attachEvents();
+      this.onReadyFnCallback();
+   }
 
-         return this.each(function () {
-            const $calendar = jQuery(this);
+   updateData(options) {
+      this.settings = { ...this.settings, ...options };
+      this.updateCalendar();
+   }
 
-            // Prevent overwrite
-            if ($calendar.data('isActive')) {
-               return;
-            }
-            $calendar.data('isActive', true);
+   updateCalendar() {
+      this.element.innerHTML = '';
+      this.prepareData();
+      this.renderCalendar();
+      this.attachEvents();
+   }
 
-            let
-               $prev,
-               $next,
-               $month,
-               $year,
-               $day,
-               timeSelected,
-               timeNowLocal = moment(timeNow.locale(settings.lang)),
-               timeForWork = moment(timeNowLocal),
-               weekFirstDay,
-               weekLastDay,
-               monthLastDay,
-               fromYear,
-               toYear,
-               firstStart = true,
-               maxYear,
-               maxMonth,
-               maxDay;
+   prepareData() {
+      this.timeSelected = this.settings.startDate ? this.parseStartDate(this.settings.startDate) : null;
+      const [fromYear, toYear] = this.parseYears(this.settings.years);
+      this.fromYear = fromYear;
+      this.toYear = toYear;
 
-            // Public methods
-            this.updateData = function (options) {
-               settings = Object.assign(settings, options);
-               removeHTML();
-            };
-
-            // Private methods
-            const removeHTML = () => {
-               detachEvents();
-               prepareData();
-               prepareCalendar();
-               attachEvents();
-            };
-
-            const detachEvents = () => {
-               $prev.off('click');
-               $next.off('click');
-               $month.off('change');
-               $year.off('change');
-               $day.off('click');
-            };
-
-            const attachEvents = () => {
-               if (!settings.hideArrows) {
-                  $prev.on('click', e => {
-                     e.preventDefault();
-                     timeNowLocal.subtract(1, 'months');
-                     if (timeNowLocal.year() < fromYear) {
-                        timeNowLocal.add(1, 'months');
-                     }
-                     removeHTML();
-                  });
-                  $next.on('click', e => {
-                     e.preventDefault();
-                     timeNowLocal.add(1, 'months');
-                     if (timeNowLocal.year() > toYear) {
-                        timeNowLocal.subtract(1, 'months');
-                     }
-                     removeHTML();
-                  });
-               }
-
-               $month.on('change', e => {
-                  e.preventDefault();
-                  const toMonth = $month.val();
-                  timeNowLocal.month(toMonth);
-                  removeHTML();
-               });
-
-               $year.on('change', e => {
-                  e.preventDefault();
-                  const toYear = $year.val();
-                  timeNowLocal.year(toYear);
-                  removeHTML();
-               });
-
-               if (settings.clickable) {
-                  $day.on('click', function (e) {
-                     e.preventDefault();
-                     const toDay = $(this).text();
-
-                     const isMaxYear = maxYear && (maxYear === timeNowLocal.year());
-                     const isMaxMonth = isMaxYear && (maxMonth === timeNowLocal.month());
-                     const isMaxDay = isMaxYear && isMaxMonth && toDay > maxDay;
-
-                     if (isMaxDay) return;
-
-                     timeNowLocal.date(parseInt(toDay));
-                     timeSelected = moment(timeNowLocal);
-                     settings.startDate = timeSelected.format(settings.format.includes('L') ? 'YYYY-MM-DD' : settings.format);
-
-                     // trigger callback function
-                     if (typeof settings.onClick === 'function') {
-                        settings.onClick.call(this, settings.format === 'moment' ? timeSelected : timeSelected.format(settings.format));
-                     }
-
-                     removeHTML();
-                  });
-               }
-            };
-
-            const prepareData = () => {
-               // Start date
-               if (settings.startDate) {
-                  timeSelected = moment(settings.startDate, settings.format.includes('L') ? 'YYYY.MM.DD' : settings.format);
-               }
-
-               // Years diapason
-               const tempYears = settings.years.toString().split('-');
-               try {
-                  fromYear = tempYears.length === 1 ? moment().subtract(tempYears[0], 'years').year() : parseInt(tempYears[0]);
-                  toYear = tempYears.length === 2 ? parseInt(tempYears[1]) : parseInt(moment().year());
-               } catch (e) {
-                  console.error('Invalid years format:', settings.years);
-                  // Handle the error appropriately, e.g., by setting default values or informing the user
-               }
-
-               const maxDateInfo = settings.maxDate && parseMaxDate(settings.maxDate);
-               if (maxDateInfo) {
-                  maxYear = maxDateInfo.year;
-                  maxMonth = maxDateInfo.month;
-                  maxDay = maxDateInfo.day;
-               }
-
-               // Ensure toYear is within valid range
-               if (toYear < timeNowLocal.year()) {
-                  timeNowLocal = timeNowLocal.year(toYear).month(11); // December
-               }
-               else if (fromYear > timeNowLocal.year()) {
-                  timeNowLocal = timeNowLocal.year(fromYear).month(0); // January
-               }
-            };
-
-            const prepareCalendar = () => {
-               const isMaxYear = maxYear && (maxYear === timeNowLocal.year());
-               const isMaxMonth = isMaxYear && (maxMonth === timeNowLocal.month());
-
-               weekFirstDay = parseInt(timeForWork.startOf('month').format('d'));
-               weekLastDay = parseInt(timeForWork.endOf('month').format('d')) + 1;
-               monthLastDay = timeForWork.daysInMonth();
-
-               let html = `<div class="ic__container">`;
-               html += `<div class="ic__header">`;
-               html += `<div class="ic__prev"><div></div></div>`;
-               html += `<div class="ic__next"><div></div></div>`;
-
-               // Head month
-               html += `<div class="ic__month"><select class="ic__month-select">`;
-               for (let i = 0; i < 12; i++) {
-                  if (isMaxYear && (i > maxMonth)) continue;
-                  html += `<option value="${i}" ${i === timeNowLocal.month() ? 'selected' : ''}>${timeForWork.month(i).format('MMMM')}</option>`;
-               }
-               html += `</select></div>`;
-
-               // Head year
-               html += `<div class="ic__year"><select class="ic__year-select">`;
-               for (let i = fromYear; i <= toYear; i++) {
-                  html += `<option value="${i}" ${timeNowLocal.year() === i ? 'selected' : ''} ${i === maxYear ? 'disabled' : ''}>${i}</option>`;
-               }
-               html += `</select></div>`;
-               html += `</div>`;
-
-               // Week header
-               html += `<table class="ic__week-head"><tr>`;
-               const START_DAY_INDEX = settings.sundayFirst ? 0 : 1;
-               for (let i = START_DAY_INDEX; i < CONSTANTS.DAYS_IN_WEEK + START_DAY_INDEX; i++) {
-                  html += `<td>${timeForWork.day(i % CONSTANTS.DAYS_IN_WEEK).format('dd')}</td>`;
-               }
-               html += `</tr></table>`;
-
-               // Days
-               html += `<table class="ic__days"><tr>`;
-
-               // Render days and empty cells
-               for (let i = 0; i < weekFirstDay; i++) {
-                  html += `<td class="ic__day-empty">${CONSTANTS.EMPTY_CELL}</td>`;
-               }
-
-               for (let i = 1; i <= monthLastDay; i++) {
-                  const isMaxDay = isMaxYear && isMaxMonth && i > maxDay;
-                  const isCurrentDay = moment(timeNowLocal).date(i).isSame(timeNow, 'day');
-                  const isSelectedDay = timeSelected && moment(timeNowLocal).date(i).isSame(timeSelected, 'day');
-
-                  if (isMaxDay) {
-                     html += `<td class="ic__day-empty">${CONSTANTS.EMPTY_CELL}</td>`;
-                  }
-                  else {
-                     const dayClass = `ic__day${isCurrentDay ? ' ic__day_state_current' : isSelectedDay ? ' ic__day_state_selected' : ''}`;
-                     html += `<td class="${dayClass}">${i}</td>`;
-                  }
-
-                  if ((weekFirstDay + i) % CONSTANTS.DAYS_IN_WEEK === 0) {
-                     html += `</tr><tr>`;
-                  }
-
-                  // stop rendering other days
-                  if (isMaxDay) {
-                     weekLastDay = (weekFirstDay + i) % CONSTANTS.DAYS_IN_WEEK;
-                     break;
-                  }
-               }
-
-               for (let i = weekLastDay; i < CONSTANTS.DAYS_IN_WEEK; i++) {
-                  html += `<td class="ic__day-empty">${CONSTANTS.EMPTY_CELL}</td>`;
-               }
-
-               html += `</tr></table>`;
-               html += `</div>`;
-
-               $calendar.html(html);
-
-               // Cache DOM elements
-               $prev = $calendar.find('.ic__prev');
-               $next = $calendar.find('.ic__next');
-               $month = $calendar.find('.ic__month-select');
-               $year = $calendar.find('.ic__year-select');
-               $day = $calendar.find('.ic__day');
-
-               attachEvents();
-
-               if (typeof settings.onReady === 'function') {
-                  settings.onReady.call(this, timeNowLocal.format());
-               }
-
-               if (settings.startDate && firstStart) {
-                  firstStart = false;
-                  timeNowLocal.year(parseInt(timeSelected.format('YYYY')));
-                  timeNowLocal.month(parseInt(timeSelected.format('M') - 1));
-                  removeHTML();
-               }
-            };
-
-            prepareData();
-            prepareCalendar();
-
-            function parseMaxDate(maxDate) {
-               let maxDateMoment;
-               try {
-                  // Attempt to parse maxDate using Moment.js with a liberal format
-                  maxDateMoment = moment(maxDate, ['L', 'YYYY-MM-DD', 'YYYY.MM.DD', 'DD.MM.YYYY'], true);
-                  if (!maxDateMoment.isValid()) {
-                     throw new Error('Invalid maximum date format:' + maxDate);
-                  }
-               } catch (e) {
-                  console.error(e.message);
-                  return { year: null, month: null, day: null }; // Return default values if parsing fails
-               }
-
-               return {
-                  year: maxDateMoment.year(),
-                  month: maxDateMoment.month(),
-                  day: maxDateMoment.date()
-               };
-            }
-         });
-      },
-      update: function (options) {
-         return this.each(function () {
-            this.updateData(options);
-         });
+      const maxDateInfo = this.parseMaxDate(this.settings.maxDate);
+      if (maxDateInfo) {
+         this.maxYear = maxDateInfo.year;
+         this.maxMonth = maxDateInfo.month;
+         this.maxDay = maxDateInfo.day;
       }
-   };
 
-   jQuery.fn.ionCalendar = function (method) {
-      if (methods[method]) {
-         return methods[method].apply(this, arguments.slice(1));
+      this.setValidYearRange();
+   }
+
+   parseStartDate(startDate) {
+      const format = this.settings.format.includes('L') ? 'YYYY.MM.DD' : this.settings.format;
+      return moment(startDate, format).locale(this.settings.lang);
+   }
+
+   parseYears(years) {
+      const tempYears = years.split('-');
+      const fromYear = tempYears.length === 1 ? moment().subtract(tempYears[0], 'years').year() : parseInt(tempYears[0]);
+      const toYear = tempYears.length === 2 ? parseInt(tempYears[1]) : parseInt(moment().year());
+      return [fromYear, toYear];
+   }
+
+   setValidYearRange() {
+      if (this.toYear < this.timeNowLocal.year()) {
+         this.timeNowLocal.year(this.toYear).month(11); // December
       }
-      else if (typeof method === 'object' || !method) {
-         return methods.init.apply(this, arguments);
+      else if (this.fromYear > this.timeNowLocal.year()) {
+         this.timeNowLocal.year(this.fromYear).month(0); // January
+      }
+   }
+
+   renderCalendar() {
+      const timeForWork = moment(this.timeNowLocal);
+      this.element.innerHTML = `
+         <div class="ic__container">
+            <div class="ic__header">
+               <div class="ic__prev"><div></div></div>
+               <div class="ic__next"><div></div></div>
+               <div class="ic__month">${this.getMonthOptions(timeForWork)}</div>
+               <div class="ic__year">${this.getYearOptions()}</div>
+            </div>
+            ${this.getWeekHeader(timeForWork)}
+            ${this.getDays()}
+         </div>`;
+   }
+
+   getMonthOptions(timeForWork) {
+      let html = '<select class="ic__month-select">';
+      for (let i = 0; i < 12; i++) {
+         if (this.isMaxMonth(i)) break;
+         html += `<option value="${i}" ${i === this.timeNowLocal.month() ? 'selected' : ''}>${timeForWork.month(i).format('MMMM')}</option>`;
+      }
+      html += `</select>`;
+      return html;
+   }
+
+   getYearOptions() {
+      let html = '<select class="ic__year-select">';
+      for (let i = this.fromYear; i <= this.toYear; i++) {
+         html += `<option value="${i}" ${this.timeNowLocal.year() === i ? 'selected' : ''}>${i}</option>`;
+      }
+      html += `</select>`;
+      return html;
+   }
+
+   getWeekHeader(timeForWork) {
+      const START_DAY_INDEX = this.settings.sundayFirst ? 0 : 1;
+      let html = `<table class="ic__week-head"><tr>`;
+      for (let i = START_DAY_INDEX; i < this.settings.daysInWeek + START_DAY_INDEX; i++) {
+         const day = timeForWork.day(i % this.settings.daysInWeek).format('dd');
+         html += `<td>${day}</td>`;
+      }
+      html += `</tr></table>`;
+      return html;
+   }
+
+   getDays() {
+      const weekFirstDay = parseInt(this.timeNowLocal.startOf('month').format('d'));
+      const monthLastDay = this.timeNowLocal.daysInMonth();
+      // let weekLastDay = parseInt(this.timeNowLocal.endOf('month').format('d'));
+      let weekLastDay = monthLastDay;
+
+      let html = `<table class='ic__days'><tr>`;
+
+      const adjustedWeekFirstDay = this.settings.sundayFirst ? weekFirstDay : Math.max(weekFirstDay - 1, 0);
+
+      // Add empty cells for the days before the first day of the month
+      for (let i = 0; i < adjustedWeekFirstDay; i++) {
+         html += `<td class="ic__day-empty">${this.settings.emptyCell}</td>`;
+      }
+
+      // Add days of the month
+      for (let i = 1; i <= monthLastDay; i++) {
+         const isMaxDay = this.isMaxDay(i);
+         const isCurrentDay = moment(this.timeNowLocal).date(i).isSame(this.timeNow, 'day');
+         const isSelectedDay = this.isSelectedDay(i);
+
+         if (isMaxDay) {
+            html += `<td class="ic__day-empty">${this.settings.emptyCell}</td>`;
+         }
+         else {
+            const dayClass = `ic__day${isCurrentDay ? ' ic__day_state_current' : isSelectedDay ? ' ic__day_state_selected' : ''}`;
+            html += `<td class="${dayClass}">${i}</td>`;
+         }
+
+         // Close the row and start a new one if the week ends
+         if ((adjustedWeekFirstDay + i) % this.settings.daysInWeek === 0) {
+            html += `</tr><tr>`;
+         }
+
+         // Stop adding days once the max day is reached
+         if (isMaxDay) {
+            weekLastDay = i
+            break;
+         }
+      }
+
+      // Add empty cells for the days after the last day of the month
+      const adjustedWeekLastDay = (adjustedWeekFirstDay + weekLastDay) % this.settings.daysInWeek;
+      if (adjustedWeekLastDay !== 0) { // Only add empty cells if the last day is not the last day of the week
+         for (let i = adjustedWeekLastDay; i < this.settings.daysInWeek; i++) {
+            html += `<td class="ic__day-empty">${this.settings.emptyCell}</td>`;
+         }
+      }
+
+      html += `</tr></table>`;
+      return html;
+   }
+
+   attachEvents() {
+      const $prev = this.element.querySelector('.ic__prev');
+      const $next = this.element.querySelector('.ic__next');
+      const $month = this.element.querySelector('.ic__month-select');
+      const $year = this.element.querySelector('.ic__year-select');
+      const $days = this.element.querySelectorAll('.ic__day');
+
+      if (this.settings.hideArrows) {
+         $prev.style.display = 'none';
+         $next.style.display = 'none';
       }
       else {
-         jQuery.error(`Method ${method} does not exist for jQuery.ionCalendar`);
+         $prev.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.timeNowLocal.subtract(1, 'months');
+            this.updateCalendar();
+         });
+         $next.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.timeNowLocal.add(1, 'months');
+            if (this.isMaxMonth(this.timeNowLocal.month())) {
+               this.timeNowLocal.subtract(1, 'months');
+            }
+            this.updateCalendar();
+         });
       }
-   };
-})(jQuery);
+
+      $month.addEventListener('change', (e) => {
+         e.preventDefault();
+         const toMonth = parseInt(e.target.value);
+         this.timeNowLocal.month(toMonth);
+         this.updateCalendar();
+      });
+      $year.addEventListener('change', (e) => {
+         e.preventDefault();
+         const toYear = parseInt(e.target.value);
+         this.timeNowLocal.year(toYear);
+         this.updateCalendar();
+      });
+
+      if (this.settings.clickable) {
+         $days.forEach(day => {
+            day.addEventListener('click', (e) => {
+               e.preventDefault();
+               const toDay = parseInt(e.target.textContent);
+               const isMaxDay = this.isMaxDay(toDay);
+
+               if (isMaxDay) return;
+
+               this.timeNowLocal.date(toDay);
+               this.timeSelected = moment(this.timeNowLocal);
+               this.settings.startDate = this.timeSelected.format(this.settings.format.includes('L') ? 'YYYY-MM-DD' : this.settings.format);
+
+               if (typeof this.settings.onClick === 'function') {
+                  this.settings.onClick.call(this, this.settings.format === 'moment' ? this.timeSelected : this.timeSelected.format(this.settings.format));
+               }
+
+               this.updateCalendar();
+            });
+         });
+      }
+   }
+
+   isMaxYear(year) {
+      return this.maxYear && this.maxYear === year;
+   }
+
+   isMaxMonth(month) {
+      return this.isMaxYear(this.timeNowLocal.year()) && this.maxMonth === month;
+   }
+
+   isMaxDay(day) {
+      return this.isMaxYear(this.timeNowLocal.year()) && this.isMaxMonth(this.timeNowLocal.month()) && day > this.maxDay;
+   }
+
+   isSelectedDay(day) {
+      return this.timeSelected && moment(this.timeNowLocal).date(day).isSame(this.timeSelected, 'day');
+   }
+
+   onReadyFnCallback() {
+      if (typeof this.settings.onReady === 'function') {
+         this.settings.onReady.call(this, this.timeNowLocal.format());
+      }
+
+      if (this.settings.startDate && this.firstStart) {
+         this.firstStart = false;
+         this.timeNowLocal.year(parseInt(this.timeSelected.format('YYYY')));
+         this.timeNowLocal.month(parseInt(this.timeSelected.format('M')) - 1);
+         this.updateCalendar();
+      }
+   }
+
+   selectToday() {
+      this.timeNowLocal = moment().locale(this.settings.lang);
+      this.updateCalendar();
+   }
+
+   parseMaxDate(maxDate) {
+      let maxDateMoment;
+      try {
+         maxDateMoment = moment(maxDate, ['L', 'YYYY-MM-DD', 'YYYY.MM.DD', 'DD.MM.YYYY'], true);
+         if (!maxDateMoment.isValid()) {
+            throw new Error('Invalid maximum date format: ' + maxDate);
+         }
+      } catch (e) {
+         console.error(e.message);
+         return { year: null, month: null, day: null };
+      }
+      return {
+         year: maxDateMoment.year(),
+         month: maxDateMoment.month(),
+         day: maxDateMoment.date()
+      };
+   }
+}
+
+export default IonCalendar;

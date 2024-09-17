@@ -1,3 +1,5 @@
+import IonCalendar from '/js/calendar.js';
+
 class Application {
    constructor() {
       this.KEYS = { A: 65 };
@@ -49,7 +51,7 @@ class Application {
    }
 
    initMain() {
-      this.trottleSearch = _.debounce(this.historySearch, 500);
+      this.trottleSearch = this.debounce(this.historySearch, 500);
 
       const goOptions = document.getElementById('go_options');
       const optionsCancel = document.getElementById('options_cancel');
@@ -77,6 +79,7 @@ class Application {
       document.getElementById('go_today').addEventListener('click', e => {
          e.preventDefault();
          this.historyGetDay(this.today);
+         this.calendar.selectToday();
       });
 
       document.getElementById('clear_confirm').addEventListener('click', e => {
@@ -111,20 +114,15 @@ class Application {
    }
 
    initCalendar() {
-      // const calendar = document.createElement('div');
-      //   calendar.classList.add('calendar');
-      //   document.querySelector('.sidebar .nav .content').prepend(calendar);
+      const calendarElement = document.createElement('div');
+      calendarElement.classList.add('calendar');
+      document.querySelector('.sidebar .nav .content').prepend(calendarElement);
 
-      const calendar = $('<div />').addClass('calendar');
-      $('.sidebar .nav .content').prepend(calendar);
-
-      calendar.ionCalendar({
+      this.calendar = new IonCalendar(calendarElement, {
          lang: this.getCurrentLocale(),
-         // sundayFirst: moment.localeData().firstDayOfWeek() == 0,
          sundayFirst: Boolean(this.options.sundayFirst),
          startDate: this.today,
          maxDate: this.today,
-         // maxDate: moment('2024-09-12'),
          years: (this.now.getFullYear() - 3) + '-' + this.now.getFullYear(),
          onClick: date => this.historyGetDay(new Date(date))
       });
@@ -421,8 +419,24 @@ class Application {
       return string
          .replace(/</g, '&#x3C;')
          .replace(/>/g, '&#x3E;')
-         .replace(/'/g, '&quot;')
+         .replace(/"/g, '&quot;')
          .replace(/'/g, '&#039;');
+   }
+
+   debounce(func, wait) {
+      let timeout;
+
+      const debouncedFunction = function (...args) {
+         const context = this;
+         clearTimeout(timeout);
+         timeout = setTimeout(() => func.apply(context, args), wait);
+      };
+
+      debouncedFunction.cancel = function () {
+         clearTimeout(timeout);
+      };
+
+      return debouncedFunction;
    }
 }
 
