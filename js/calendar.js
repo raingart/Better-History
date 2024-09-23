@@ -113,8 +113,8 @@ class IonCalendar {
    getMonthOptions(timeForWork) {
       let html = '<select class="ic__month-select">';
       for (let i = 0; i < 12; i++) {
-         if (this.isMaxMonth(i)) break;
          html += `<option value="${i}" ${i === this.timeNowLocal.month() ? 'selected' : ''}>${timeForWork.month(i).format('MMMM')}</option>`;
+         if (this.isMaxMonth(i)) break;
       }
       html += `</select>`;
       return html;
