@@ -123,7 +123,7 @@ class Application {
          sundayFirst: Boolean(this.options.sundayFirst),
          startDate: this.today,
          maxDate: this.today,
-         years: (this.now.getFullYear() - 3) + '-' + this.now.getFullYear(),
+         yearRange: (this.now.getFullYear() - 3) + '-' + this.now.getFullYear(),
          onClick: date => this.historyGetDay(new Date(date))
       });
    }
