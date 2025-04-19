@@ -1,367 +1,697 @@
 import IonCalendar from '/js/calendar.js';
 
+dayjs.extend(dayjs_plugin_customParseFormat);
+// dayjs.extend(dayjs_plugin_localizedFormat);
+dayjs.extend(dayjs_plugin_localeData);
+// dayjs.locale('en') // https://cdn.jsdelivr.net/npm/dayjs@1/locale/zh-cn.js
+
 class Application {
    constructor() {
-      this.KEYS = { A: 65 };
-      this.now = new Date();
+      // Default options, may be overridden by saved settings
       this.options = {
          use24HoursFormat: true,
          timeBeforeTitle: false,
-         sundayFirst: moment.localeData().firstDayOfWeek() === 0,
-         // popupNbItems: 10
+         sundayFirst: false,
+         pageItems: 1000,
       };
+      // State variables
+      this.now = null;
       this.today = null;
+      this.currentDay = null;
       this.isSearching = false;
       this.isLoading = false;
-      this.autoFocus = false;
-      this.trottleSearch = null;
       this.controlPressed = false;
-      this.majPressed = false;
+      this.shiftPressed = false;
       this.multiSelectLastEntry = null;
+      this.currentPage = 1;
+      this.searchQuery = '';
+      this.throttleSearch = null;
 
-      this.init();
+      this.refreshTime(); // Initial time setup
+      this.init();        // Start initialization
    }
 
    init() {
       this.i18n();
-      this.today = new Date(this.now.getFullYear(), this.now.getMonth(), this.now.getDate(), 0, 0, 0, 0);
 
-      chrome.storage.sync.get(items => {
-         this.options.use24HoursFormat = items.use24HoursFormat === undefined ? true : items.use24HoursFormat;
-         this.options.timeBeforeTitle = items.timeBeforeTitle === undefined ? false : items.timeBeforeTitle;
-         this.options.sundayFirst = items.sundayFirst === undefined ? false : items.sundayFirst;
-         // this.options.popupNbItems = items.popupNbItems === undefined ? 10 : items.popupNbItems;
+      // Set Day.js locale based on browser language preference
+      try {
+         const currentLocale = this.getCurrentLocale();
+         if (dayjs.locale() !== currentLocale) dayjs.locale(currentLocale);
+      } catch (e) {
+         console.warn(`Day.js locale '${this.getCurrentLocale()}' failed to load. Falling back to '${dayjs.locale()}'.`, e);
+      }
 
-         if (document.body.classList.contains('popup')) {
-            this.initPopup();
-         }
-         else {
-            this.initMain();
-         }
+      // Determine default for sundayFirst based on the current Day.js locale
+      let defaultSundayFirst = false;
+      try {
+         defaultSundayFirst = dayjs.localeData().firstDayOfWeek() === 0; // 0 = Sunday
+      } catch (e) {
+         console.error("Failed to get locale data for sundayFirst default.", e);
+      }
+
+      browser.storage.sync.get(items => {
+         this.setOptions(items, defaultSundayFirst);
+         document.body.classList.contains('popup') ? this.initPopup() : this.initMain();
       });
    }
 
+   getToday() {
+      return dayjs().startOf('day').toDate(); // Returns a Date object for 00:00:00 today
+   }
+
+   refreshTime() {
+      this.now = new Date(); // Current time
+      this.today = this.getToday();
+   }
+
+   setOptions(items, defaultSundayFirst) {
+      this.options.use24HoursFormat = items.use24HoursFormat ?? true;
+      this.options.timeBeforeTitle = items.timeBeforeTitle ?? false;
+      this.options.sundayFirst = items.sundayFirst ?? defaultSundayFirst;
+      this.options.pageItems = +items.pageItems || 1000;
+   }
+
+   // --- Popup Initialization ---
    initPopup() {
-      this.historyGetDay(this.today, this.options.popupNbItems);
+      this.historyGetDay(this.today);
+      document.getElementById('go_history').addEventListener('click', this.openHistoryPage.bind(this));
+   }
 
-      document.getElementById('go_history').addEventListener('click', e => {
-         e.preventDefault();
-         chrome.runtime.sendMessage({ command: 'open-history-page' }, console.log);
+   openHistoryPage(e) {
+      e.preventDefault();
+      browser.runtime.sendMessage({ command: 'open-history-page' }, response => {
+         if (browser.runtime.lastError) {
+            console.error("Error sending message:", browser.runtime.lastError);
+         }
       });
    }
 
+   // --- Main Page Initialization ---
    initMain() {
-      this.trottleSearch = this.debounce(this.historySearch, 500);
+      this.refreshTime();
+      this.setupMainElements();
+      this.initCalendar();
+      this.historyGetDay(this.today); // Initial view
+   }
 
+   setupMainElements() {
+      this.setupOptionButtons();
+      this.setupSearch();
+      this.setupHistoryNavigation();
+   }
+
+   setupOptionButtons() {
       const goOptions = document.getElementById('go_options');
+      const optionsForm = document.getElementById('options-form');
       const optionsCancel = document.getElementById('options_cancel');
       const optionsClose = document.getElementById('options_close');
-      const optionsSave = document.getElementById('options_save');
-      const searchInput = document.getElementById('search_input');
-      const searchClear = document.getElementById('search_clear');
+      const modalOverlay = document.getElementById('modal_options');
 
-      goOptions.addEventListener('click', () => this.openOptions());
+      goOptions.addEventListener('click', this.openOptions.bind(this));
+      optionsForm.addEventListener('submit', this.handleOptionsSubmit.bind(this));
       optionsCancel.addEventListener('click', () => this.closeOptions());
       optionsClose.addEventListener('click', () => this.closeOptions());
-      optionsSave.addEventListener('click', () => this.saveOptions());
 
-      searchInput.addEventListener('focusin', () => searchInput.parentElement.classList.add('focus'));
-      searchInput.addEventListener('focusout', () => searchInput.parentElement.classList.remove('focus'));
-      searchInput.addEventListener('keyup', () => this.inputSearch());
+      modalOverlay.addEventListener('click', evt => {
+         if (evt.target === evt.currentTarget) this.closeOptions();
+      });
+   }
+
+   setupSearch() {
+      const searchInput = document.getElementById('search_input');
+      const searchClear = document.getElementById('search_clear');
+      const searchContainer = searchInput.parentElement;
+
+      this.throttleSearch = this.debounce(this.historySearch, 500);
+
+      searchInput.addEventListener('focusin', () => searchContainer.classList.add('focus'));
+      searchInput.addEventListener('focusout', () => searchContainer.classList.remove('focus'));
+      searchInput.addEventListener('input', this.inputSearch.bind(this));
+      // searchInput.addEventListener('change', this.inputSearch.bind(this)); // on input completion
 
       searchClear.addEventListener('click', e => {
          e.preventDefault();
-         this.clearSearch();
+         searchInput.value = '';
+         searchInput.focus();
+         this.resetSearch();
+         searchClear.style.display = 'none';
       });
 
-      this.initCalendar();
+      searchClear.style.display = searchInput.value ? 'flex' : 'none';
+      searchInput.focus();
+   }
 
-      document.getElementById('go_today').addEventListener('click', e => {
+   setupHistoryNavigation() {
+      const goToday = document.getElementById('go_today');
+      const clearConfirm = document.getElementById('clear_confirm');
+      const clearCancel = document.getElementById('clear_cancel');
+
+      goToday.addEventListener('click', e => {
          e.preventDefault();
          this.historyGetDay(this.today);
-         this.calendar.selectToday();
+         this.calendar?.selectToday();
       });
 
-      document.getElementById('clear_confirm').addEventListener('click', e => {
+      clearConfirm.addEventListener('click', e => {
          e.preventDefault();
-         this.removeSelectedEntires();
+         this.removeSelectedEntries();
       });
 
-      document.getElementById('clear_cancel').addEventListener('click', e => {
+      clearCancel.addEventListener('click', e => {
          e.preventDefault();
          this.clearSelectedItems();
       });
 
-      document.addEventListener('keydown', e => {
-         if (e.which === 17) this.controlPressed = true;
-         else if (e.which === 16) this.majPressed = true;
-         else this.keypressMulti(e);
-      });
-
-      document.addEventListener('keyup', e => {
-         if (e.which === 17) this.controlPressed = false;
-         else if (e.which === 16) this.majPressed = false;
-      });
-
-      document.addEventListener('click', e => {
-         if (!e.target.closest('.entry') && !e.target.closest('.remove-confirmation')) {
-            this.clearSelectedItems();
-         }
-      });
-
-      searchInput.focus();
-      this.historyGetDay(this.today);
+      document.addEventListener('keydown', this.handleKeyDown.bind(this));
+      document.addEventListener('keyup', this.handleKeyUp.bind(this));
+      document.addEventListener('click', this.handleDocumentClick.bind(this));
    }
 
+   // --- Keyboard Handling ---
+   handleKeyDown(e) {
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.controlPressed = true;
+      else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftPressed = true;
+      else this.handleGlobalKeyPress(e);
+   }
+
+   handleKeyUp(e) {
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.controlPressed = false;
+      else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftPressed = false;
+   }
+
+   handleGlobalKeyPress(e) {
+      if (e.target.id === 'search_input') return; // Ignore typing in search
+
+      // Use e.code for shortcuts
+      switch (e.code) {
+         case 'KeyA': // Ctrl+A: Select all
+            if (this.controlPressed) {
+               e.preventDefault();
+               this.selectAllEntries();
+            }
+            break;
+         case 'Delete': // Delete selected
+            if (document.querySelector('.history-container .entry.selected')) {
+               this.showRemoveConfirmation();
+            }
+            break;
+         case 'Escape': // Clear selection
+            this.clearSelectedItems();
+            break;
+      }
+   }
+
+   // --- Global Click ---
+   handleDocumentClick(e) {
+      // Deselect if click is outside relevant areas
+      if (!e.target.closest('.entry') && !e.target.closest('.remove-confirmation')) {
+         this.clearSelectedItems();
+      }
+   }
+
+   // --- Calendar ---
    initCalendar() {
+      const calendarContainer = document.querySelector('.sidebar .nav .content');
       const calendarElement = document.createElement('div');
       calendarElement.classList.add('calendar');
-      document.querySelector('.sidebar .nav .content').prepend(calendarElement);
+      calendarContainer.prepend(calendarElement);
+
+      if (typeof IonCalendar === 'undefined') {
+         console.error("IonCalendar class is not defined.");
+         return;
+      }
+
+      const todayForCalendar = dayjs(this.today);
 
       this.calendar = new IonCalendar(calendarElement, {
-         lang: this.getCurrentLocale(),
-         sundayFirst: Boolean(this.options.sundayFirst),
-         startDate: this.today,
-         maxDate: this.today,
-         yearRange: (this.now.getFullYear() - 3) + '-' + this.now.getFullYear(),
-         onClick: date => this.historyGetDay(new Date(date))
+         sundayFirst: this.options.sundayFirst,
+         startDate: todayForCalendar,
+         maxDate: todayForCalendar,
+         yearRange: `${this.now.getFullYear() - 3}-${this.now.getFullYear()}`,
+         format: 'dayjs',
+         onClick: dateObject => {
+            const date = dayjs.isDayjs(dateObject) ? dateObject.toDate() : dayjs(dateObject).toDate();
+            if (dayjs(date).isValid()) {
+               this.historyGetDay(date);
+            }
+            else {
+               console.error("Invalid date received from calendar onClick:", dateObject);
+            }
+         }
       });
    }
 
+   getCurrentLocale() {
+      return browser.i18n.getMessage('language') || 'en';
+   }
+
+   // --- Search ---
    inputSearch() {
-      const searchQuery = document.getElementById('search_input').value;
+      const searchInput = document.getElementById('search_input');
       const searchClear = document.getElementById('search_clear');
+      const searchQuery = searchInput.value;
+
+      searchClear.style.display = searchQuery ? 'flex' : 'none';
 
       if (searchQuery) {
-         searchClear.style.display = 'flex';
-         this.trottleSearch(searchQuery);
+         this.throttleSearch(searchQuery);
       }
       else {
-         if (this.isSearching) {
-            this.clearContent();
-            this.historyGetDay(this.today);
-         }
-         this.trottleSearch.cancel();
-         this.isSearching = false;
-         searchClear.style.display = 'none';
+         this.resetSearch();
       }
    }
 
-   clearSearch() {
-      document.getElementById('search_input').value = '';
-      this.inputSearch();
+   resetSearch() {
+      this.throttleSearch?.cancel();
+      this.searchQuery = '';
+      this.isSearching = false;
+
+      const searchInput = document.getElementById('search_input');
+      if (searchInput) searchInput.value = '';
+      const searchClear = document.getElementById('search_clear');
+      if (searchClear) searchClear.style.display = 'none';
+
+      // Reload current day view. Avoids potential double load if reset was triggered by historyGetDay.
+      // Consider if this is always the desired behavior on reset.
+      this.historyGetDay(this.currentDay || this.today);
    }
 
    historySearch(query) {
+      this.refreshTime();
       this.isSearching = true;
+      this.isLoading = true;
       this.clearContent();
-      this.historyQuery(query, new Date(1970, 1, 1), new Date(this.today.getFullYear(), this.today.getMonth(), this.today.getDate(), 23, 59, 59), 0);
+      this.updateLoadingState();
+      this.searchQuery = query;
+      this.currentPage = 1;
+      const dateStart = dayjs(0).toDate();
+      const dateEnd = dayjs(this.today).endOf('day').toDate();
+      this.historyQuery(query, dateStart, dateEnd);
    }
 
-   historyGetDay(day, nbEntries = 0) {
-      if (day > this.now) return;
+   // --- History Data Loading ---
+   historyGetDay(day, currentPage = 1) {
+      this.refreshTime();
+      const dayObj = dayjs(day);
 
-      const dateStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
-      const dateEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+      if (dayObj.isAfter(this.now, 'day')) return; // Don't load future dates
 
+      this.currentDay = day instanceof Date ? day : dayObj.toDate();
+      this.currentPage = currentPage;
+
+      if (this.isSearching) {
+         this.resetSearch(); // This triggers its own historyGetDay
+         return;
+      }
+
+      const dateStart = dayObj.startOf('day').toDate();
+      const dateEnd = dayObj.endOf('day').toDate();
+      this.isLoading = true;
       this.clearContent();
-      this.historyQuery('', dateStart, dateEnd, nbEntries);
+      this.updateLoadingState();
+      this.historyQuery('', dateStart, dateEnd); // No search text for day view
    }
 
-   historyQuery(search, start, end, nbEntries) {
-      this.isLoading = false;
+   historyQuery(search, start, end) {
+      this.isLoading = true;
+      this.updateLoadingState();
 
-      chrome.history.search({
+      browser.history.search({
          text: search,
          startTime: start.getTime(),
          endTime: end.getTime(),
-         maxResults: nbEntries
+         maxResults: 10000
       }, results => {
-         this.historyCallback(results, start, end);
+         this.isLoading = false; // Set isLoading false before potential error display
+         this.updateLoadingState();
+
+         if (browser.runtime.lastError) {
+            console.error('History search error:', browser.runtime.lastError);
+            this.displayError('Failed to load history.');
+            return;
+         }
+
+         const totalApiResults = results.length;
+         this.historyCallback(results, start, totalApiResults);
       });
    }
 
-   historyCallback(results, start, end) {
-      const items = {};
-      let count = 0;
+   historyCallback(rawResults, targetDayStart, totalApiResults) {
+      const { pageItems } = this.options;
+      const startIndex = (this.currentPage - 1) * pageItems;
+      let pageResults;
+      let itemsToRender = {};
+      let totalResultsForPagination;
 
-      results.forEach(result => {
-         const itemDate = new Date(result.lastVisitTime);
-
-         if (itemDate >= start && itemDate <= end) {
-            const itemKey = itemDate.setHours(0, 0, 0, 0).toString();
-
-            if (!items[itemKey]) {
-               items[itemKey] = [];
-            }
-            items[itemKey].push(result);
-            count++;
+      if (this.isSearching) {
+         // Process search results
+         pageResults = rawResults.slice(startIndex, startIndex + pageItems);
+         itemsToRender = this.groupResultsByDay(pageResults);
+         totalResultsForPagination = totalApiResults;
+      }
+      else {
+         // Process single day view results
+         const targetDayMoment = dayjs(targetDayStart);
+         const filteredResults = rawResults.filter(result =>
+            dayjs(result.lastVisitTime).isSame(targetDayMoment, 'day')
+         );
+         totalResultsForPagination = filteredResults.length;
+         pageResults = filteredResults.slice(startIndex, startIndex + pageItems);
+         const dayKey = targetDayMoment.startOf('day').valueOf().toString();
+         if (pageResults.length > 0 || (this.currentPage === 1 && totalResultsForPagination === 0)) {
+            itemsToRender[dayKey] = pageResults;
          }
-      });
-
-      if (Object.keys(items).length === 0) {
-         items[start.getTime()] = {};
       }
 
-      this.historyFormatDays(items, count);
+      const countOnPage = pageResults?.length ?? 0;
+      this.historyFormatDays(itemsToRender, totalResultsForPagination, countOnPage);
    }
 
-   historyFormatDays(items, count) {
+   groupResultsByDay(results) {
+      return results.reduce((acc, result) => {
+         const itemKey = dayjs(result.lastVisitTime).startOf('day').valueOf().toString();
+         (acc[itemKey] = acc[itemKey] || []).push(result);
+         return acc;
+      }, {});
+   }
+
+   paginateResults(items, currentPage, itemsPerPage) {
+      if (!items || items.length === 0 || itemsPerPage <= 0) return [];
+
+      const pageIndex = currentPage - 1; // 0-based index
+      const startIndex = pageIndex * itemsPerPage;
+      // slice end index is exclusive, so startIndex + itemsPerPage is correct
+      return items.slice(startIndex, startIndex + itemsPerPage);
+   }
+
+   // --- Rendering ---
+   historyFormatDays(items, totalResults, countOnPage) {
       this.clearContent();
 
       if (this.isSearching) {
-         this.insertContent(`<h1>${chrome.i18n.getMessage('search_display')} "${document.getElementById('search_input').value}"</h1>`);
-
-         if (count > 0) {
-            this.insertContent(`<div class="search-result">${chrome.i18n.getMessage('search_found', count.toString())}</div>`);
-         }
-         else {
-            this.insertContent(`<div class="search-result">${chrome.i18n.getMessage('search_empty')}</div>`);
-            this.isLoading = false;
-            return;
-         }
+         this.insertContent(`<h1>${browser.i18n.getMessage('search_display')} '${this.escape(this.searchQuery)}"</h1>`);
+         const messageKey = totalResults > 0 ? 'search_found' : 'search_empty';
+         this.insertContent(`<div class="search-result">${browser.i18n.getMessage(messageKey, totalResults.toString())}</div>`);
       }
 
-      Object.entries(items).forEach(([k, day]) => {
-         const date = new Date(parseFloat(k));
-         const selector = `.history-container [date="${k}"]`;
-         let html = document.querySelector(selector) ? '' : `<div class="history-day" date="${k}">`;
+      const sortedDays = Object.entries(items).sort(([keyA], [keyB]) => +keyB - +keyA);
 
-         html += `<h2>${moment(date).format(chrome.i18n.getMessage('date_format'))}</h2>`;
+      const fragment = document.createDocumentFragment();
 
-         if (day.length) {
-            day.forEach(entry => {
-               html += this.historyEntryFormat(entry);
+      sortedDays.forEach(([k, dayEntries]) => {
+         const dayDiv = document.createElement('div');
+         dayDiv.className = 'history-day';
+         dayDiv.setAttribute('date', k);
+
+         const date = dayjs(+k).toDate();
+         // fix - https://github.com/iamkun/dayjs/issues/2860
+         // const dateFormat = browser.i18n.getMessage('date_format') || 'L';
+
+         const dayJsDate = dayjs(date);
+         const baseDateFormat = "dddd, MMMM";
+         const yearFormat = "YYYY";
+         let formattedDay;
+         try {
+            const dayNumber = dayJsDate.date();
+            const ordinalStringWithBrackets = dayJsDate.localeData().ordinal(dayNumber);
+            formattedDay = ordinalStringWithBrackets.replace(/^\[|\]$/g, '');
+         } catch (e) {
+            formattedDay = dayJsDate.format('D'); // Fallback
+         }
+         const finalFormattedDate = `${dayJsDate.format(baseDateFormat)} ${formattedDay}, ${dayJsDate.format(yearFormat)}`;
+         const pageCountDisplay = this.isSearching ? '' : this.getPageCountDisplay(totalResults);
+         dayDiv.innerHTML = `<h2>${finalFormattedDate}<span>${pageCountDisplay}</span></h2>`;
+         // dayDiv.innerHTML = `<h2>${dayjs(date).format(dateFormat)}<span>${pageCountDisplay}</span></h2>`;
+         // end fix
+
+         if (dayEntries.length) {
+            dayEntries.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
+            dayEntries.forEach(entry => {
+               dayDiv.insertAdjacentHTML('beforeend', this.historyEntryFormat(entry));
             });
          }
          else {
-            html += `<div class="entry-empty">${chrome.i18n.getMessage('history_date_empty')}</div>`;
+            dayDiv.insertAdjacentHTML('beforeend', `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`);
          }
-
-         if (document.querySelector(selector) === null) {
-            html += '</div>';
-         }
-
-         this.insertContent(html);
+         fragment.appendChild(dayDiv);
       });
 
+      document.querySelector('.history-container .content').appendChild(fragment);
+
       this.historyEntriesBind();
-      this.isLoading = false;
+      this.insertPaginationControls(totalResults);
+   }
+
+   getPageCountDisplay(totalResults) {
+      const { pageItems } = this.options;
+      if (!totalResults || totalResults <= this.options.pageItems) return '';
+
+      const itemsPerPage = pageItems;
+      const currentPage = this.currentPage;
+
+      const itemsShownSoFar = Math.min(currentPage * itemsPerPage, totalResults);
+
+      // Return empty string if only one page, otherwise format page info
+      //    return totalPages <= 1
+      //       ? totalResults.toString()
+      //       // Show Page X / Y"
+      //       : browser.i18n.getMessage('pagination_page_info', [this.currentPage.toString(), totalPages.toString()]);
+
+      return `${itemsShownSoFar} / ${totalResults}`;
    }
 
    historyEntryFormat(entry) {
       const timeFormat = this.options.use24HoursFormat ? 'HH:mm' : 'hh:mm A';
-      const time = moment(new Date(entry.lastVisitTime)).format(timeFormat);
-      const title = this.escape(entry.title || entry.url);
-      const url = this.escape(entry.url);
-      const favicon = this.getFavicon(entry.url);
+      const time = dayjs(entry.lastVisitTime).format(timeFormat);
+
+      const originalUrl = entry.url;
+      const escapedTitle = this.escape(entry.title || originalUrl);
+      const escapedDisplayUrl = this.escape(originalUrl);
+      const favicon = this.getFavicon(originalUrl);
+      const { timeBeforeTitle } = this.options;
 
       return `
          <div class="entry">
-            ${this.options.timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
-            <img class="entry-icon" src="${favicon}" />
-            <div class="entry-link"><a href="${url}" target="_blank" title="${url}">${title}</a></div>
-            ${!this.options.timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
-            <a class="entry-remove" title="${chrome.i18n.getMessage('history_remove_single')}">
-               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15 15" width="12px" height="12px" slot="before">
-                  <path d="M14.1016 1.60156L8.20312 7.5L14.1016 13.3984L13.3984 14.1016L7.5 8.20312L1.60156 14.1016L0.898438 13.3984L6.79688 7.5L0.898438 1.60156L1.60156 0.898438L7.5 6.79688L13.3984 0.898438L14.1016 1.60156Z" />
-               </svg>
-            </a>
+            ${timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
+            <img class="entry-icon" src="${favicon}" loading="lazy" alt=""/>
+            <div class="entry-link"><a href="${originalUrl}" target="_blank" title="${escapedDisplayUrl}">${escapedTitle}</a></div>
+            ${!timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
+            <a href="#" class="entry-remove" title="${browser.i18n.getMessage('history_remove_single')}">✕</a>
          </div>
       `;
    }
 
-   historyEntryDelete(url, sender) {
-      const container = sender.parentElement;
-      sender.remove();
+   historyEntriesBind() {
+      document.querySelectorAll('.history-container .entry')
+         .forEach(entryElement => {
+            this.bindEntryRemoveButton(entryElement);
+            this.bindEntrySelection(entryElement);
+         });
+   }
 
-      chrome.history.deleteUrl({ url: url }, () => {
-         if (container.querySelectorAll('.entry').length === 0) {
-            this.insertContent(`<div class="entry-empty">${chrome.i18n.getMessage('history_date_empty')}</div>`, container);
+   bindEntryRemoveButton(entryElement) {
+      entryElement.querySelector('.entry-remove')?.addEventListener('click', e => {
+         e.preventDefault();
+         e.stopPropagation();
+         const linkHref = entryElement.querySelector('.entry-link a')?.href;
+         if (linkHref) {
+            this.historyEntryDelete(linkHref, entryElement);
          }
+      });
+   }
 
+   historyEntryDelete(url, entryElement) {
+      const container = entryElement.parentElement;
+      entryElement.remove(); // Optimistic removal
+
+      browser.history.deleteUrl({ url: url }, () => {
+         if (browser.runtime.lastError) {
+            console.error(`Error deleting URL: ${url}`, browser.runtime.lastError);
+            // Consider restoring the element or notifying the user
+         }
+         else {
+            // Check if day container is empty after deletion
+            if (container?.classList.contains('history-day') && !container.querySelector('.entry')) {
+               const emptyMessage = `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`;
+               container.querySelector('h2')?.insertAdjacentHTML('afterend', emptyMessage);
+            }
+            this.updateConfirm(); // Update selection count/panel
+         }
+      });
+   }
+
+   // --- Selection Logic ---
+   bindEntrySelection(entryElement) {
+      entryElement.addEventListener('click', e => {
+         if (e.target.closest('a')) return; // Ignore links
+         e.preventDefault();
+
+         const isSelected = entryElement.classList.contains('selected');
+
+         if (this.shiftPressed && this.multiSelectLastEntry) {
+            this.multiSelectRange(entryElement);
+         }
+         else if (this.controlPressed) {
+            entryElement.classList.toggle('selected');
+            this.multiSelectLastEntry = isSelected ? this.multiSelectLastEntry : entryElement; // Update last if selecting
+         }
+         else {
+            // Normal click: Clear others, select this one
+            document.querySelectorAll('.history-container .entry.selected')
+               .forEach(el => el.classList.remove('selected'));
+            entryElement.classList.add('selected');
+            this.multiSelectLastEntry = entryElement;
+         }
          this.updateConfirm();
       });
    }
 
-   historyEntriesBind() {
-      document.querySelectorAll('.history-container .entry').forEach(entry => {
-         const removeButton = entry.querySelector('.entry-remove');
-         removeButton.addEventListener('click', e => {
-            e.preventDefault();
-            this.historyEntryDelete(entry.querySelector('.entry-link a').href, entry);
-         });
+   multiSelectRange(endEntry) {
+      const entries = Array.from(document.querySelectorAll('.history-container .entry'));
+      const startIndex = entries.indexOf(this.multiSelectLastEntry);
+      const endIndex = entries.indexOf(endEntry);
 
-         entry.addEventListener('click', e => {
-            if (!e.target.closest('a') && !e.target.closest('.entry-remove')) {
-               e.preventDefault();
-               this.toggleSelection(entry);
-               this.updateConfirm();
-            }
-         });
-      });
+      if (startIndex === -1 || endIndex === -1) return;
+
+      const [start, end] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+      entries.slice(start, end + 1).forEach(entry => entry.classList.add('selected'));
    }
 
-   toggleSelection(entry) {
-      if (this.majPressed && this.multiSelectLastEntry) {
-         const entries = document.querySelectorAll('.history-container .entry');
-         const startIndex = Array.from(entries).indexOf(this.multiSelectLastEntry);
-         const endIndex = Array.from(entries).indexOf(entry);
-         const range = startIndex < endIndex ? entries.slice(startIndex, endIndex + 1) : entries.slice(endIndex, startIndex + 1);
-         range.forEach(e => e.classList.add('selected'));
-      } else {
-         this.multiSelectLastEntry = entry;
-         entry.classList.toggle('selected');
-      }
+   selectAllEntries() {
+      const entries = document.querySelectorAll('.history-container .entry');
+      entries.forEach(entry => entry.classList.add('selected'));
+      // Set last selected to the actual last element in the list
+      this.multiSelectLastEntry = entries.length ? entries[entries.length - 1] : null;
+      this.updateConfirm();
    }
 
-   keypressMulti(e) {
-      if (e.target.id !== 'search_input') {
-         if (this.controlPressed && e.which === this.KEYS.A) {
-            e.preventDefault();
-            document.querySelectorAll('.history-container .entry').forEach(entry => entry.classList.add('selected'));
-            this.updateConfirm();
-         }
-      }
+   clearSelectedItems() {
+      document.querySelectorAll('.history-container .entry.selected')
+         .forEach(entry => entry.classList.remove('selected'));
+      this.multiSelectLastEntry = null;
+      this.updateConfirm(); // Hide panel
+   }
 
-      if (e.which === 46) {
-         if (document.querySelectorAll('.history-container .entry.selected').length) {
-            this.removeSelectedEntires();
-         }
+   // --- Remove Confirmation ---
+   showRemoveConfirmation() {
+      const removeConfirmation = document.querySelector('.remove-confirmation');
+      const selectedCount = document.querySelectorAll('.history-container .entry.selected').length;
+
+      if (selectedCount > 0) {
+         removeConfirmation.classList.add('is-visible');
+         const numElement = removeConfirmation.querySelector('.num');
+         if (numElement) numElement.textContent = selectedCount.toString();
       }
    }
 
    updateConfirm() {
-      const count = document.querySelectorAll('.history-container .entry.selected').length;
+      const removeConfirmation = document.querySelector('.remove-confirmation');
+      const selectedCount = document.querySelectorAll('.history-container .entry.selected').length;
+      const numElement = removeConfirmation.querySelector('.num');
 
-      if (count > 0) {
-         document.querySelector('.remove-confirmation').style.display = 'flex';
-         document.querySelector('.remove-confirmation .num').textContent = count.toString();
-      }
-      else {
-         document.querySelector('.remove-confirmation').style.display = 'none';
+      removeConfirmation.classList.toggle('is-visible', selectedCount > 0);
+      if (selectedCount > 0) {
+         numElement.textContent = selectedCount.toString();
       }
    }
 
-   clearSelectedItems() {
-      document.querySelectorAll('.history-container .entry.selected').forEach(entry => entry.classList.remove('selected'));
-      this.multiSelectLastEntry = null;
-      this.updateConfirm();
-   }
-
-   removeSelectedEntires() {
-      document.querySelectorAll('.history-container .entry.selected').forEach(entry => {
-         entry.querySelector('.entry-remove').click();
+   removeSelectedEntries() {
+      const selectedEntries = document.querySelectorAll('.history-container .entry.selected');
+      Array.from(selectedEntries).forEach(entryElement => {
+         const linkHref = entryElement.querySelector('.entry-link a')?.href;
+         if (linkHref) {
+            this.historyEntryDelete(linkHref, entryElement);
+         }
       });
    }
 
+   // --- Pagination ---
+   insertPaginationControls(totalResults) {
+      const { pageItems } = this.options;
+
+      if (totalResults <= pageItems) return;
+
+      const totalPages = Math.ceil(totalResults / pageItems);
+      const paginationHTML = `
+         <div class="pagination">
+            <button id="prev_page" class="btn btn-secondary" ${this.currentPage <= 1 ? 'disabled' : ''}>
+               ${browser.i18n.getMessage('pagination_prev')}
+            </button>
+            <span class="page-info">${this.getPageCountDisplay(totalResults)}</span>
+            <button id="next_page" class="btn btn-secondary" ${this.currentPage >= totalPages ? 'disabled' : ''}>
+               ${browser.i18n.getMessage('pagination_next')}
+            </button>
+         </div>`;
+      this.insertContent(paginationHTML);
+      this.bindPaginationControls(totalResults);
+   }
+
+   bindPaginationControls(totalResults) {
+      const prevButton = document.getElementById('prev_page');
+      const nextButton = document.getElementById('next_page');
+      const totalPages = Math.ceil(totalResults / this.options.pageItems);
+
+      if (prevButton) {
+         prevButton.addEventListener('click', () => {
+            if (this.currentPage > 1) {
+               this.currentPage--;
+               this.reloadCurrentView(); // Load previous page
+            }
+         });
+      }
+
+      if (nextButton) {
+         nextButton.addEventListener('click', () => {
+            if (this.currentPage < totalPages) {
+               this.currentPage++;
+               this.reloadCurrentView(); // Load next page
+            }
+         });
+      }
+   }
+
+   reloadCurrentView() {
+      this.isLoading = true;
+      this.clearContent();
+      this.updateLoadingState();
+
+      const queryParams = this.isSearching
+         ? { search: this.searchQuery, start: dayjs(0).toDate(), end: dayjs(this.today).endOf('day').toDate() }
+         : this.currentDay
+            ? { search: '', start: dayjs(this.currentDay).startOf('day').toDate(), end: dayjs(this.currentDay).endOf('day').toDate() }
+            : { search: '', start: dayjs(this.today).startOf('day').toDate(), end: dayjs(this.today).endOf('day').toDate() }; // Default to today
+
+      this.historyQuery(queryParams.search, queryParams.start, queryParams.end);
+   }
+
+   // --- Utilities ---
    insertContent(html, context = null) {
-      const target = context || document.querySelector('.history-container .content');
-      target.insertAdjacentHTML('beforeend', html);
+      (context || document.querySelector('.history-container .content'))?.insertAdjacentHTML('beforeend', html);
    }
 
    clearContent() {
-      document.querySelector('.history-container .content').innerHTML = '';
+      const target = document.querySelector('.history-container .content');
+      if (target) target.innerHTML = '';
+   }
+
+   updateLoadingState() {
+      const container = document.querySelector('.history-container .content');
+      if (!container) return;
+      const loadingIndicatorClass = 'loading-indicator';
+      container.querySelector(`.${loadingIndicatorClass}`)?.remove();
+
+      if (this.isLoading) {
+         const indicator = document.createElement('div');
+         indicator.className = loadingIndicatorClass;
+         indicator.textContent = browser.i18n.getMessage('loading') || 'Loading...';
+         container.prepend(indicator);
+      }
+   }
+
+   displayError(message) {
+      this.clearContent();
+      this.insertContent(`<div class="error-message">${this.escape(message)}</div>`);
    }
 
    i18n() {
@@ -369,54 +699,80 @@ class Application {
          const i18n = element.getAttribute('i18n');
          if (i18n.includes(':')) {
             const [attr, message] = i18n.split(':');
-            element.setAttribute(attr, chrome.i18n.getMessage(message));
+            element.setAttribute(attr, browser.i18n.getMessage(message));
          }
          else {
-            element.textContent = chrome.i18n.getMessage(i18n);
+            element.textContent = browser.i18n.getMessage(i18n);
          }
       });
    }
 
-   is(target, classname) {
-      return target.classList.contains(classname) || target.closest(`.${classname}`) !== null;
-   }
-
-   getCurrentLanguage() {
-      return this.getCurrentLocale().slice(0, 2);
-   }
-
-   getCurrentLocale() {
-      return chrome.i18n.getMessage('language');
-   }
-
    getFavicon(url) {
-      return `chrome-extension://${chrome.runtime.id}/_favicon/?size=16&pageUrl=${encodeURIComponent(this.escape(url))}`;
+      try {
+         new URL(url); // Validate URL structure
+         // Use extension API (works in Chrome/Firefox within extension context)
+         return (typeof chrome !== 'undefined')
+            ? `chrome-extension://${browser.runtime.id}/_favicon/?size=16&pageUrl=${encodeURIComponent(this.escape(url))}` // chrome like
+            : `chrome://favicon/size/16@2x/${url}`; // Firefox
+      } catch (e) {
+         // console.warn("Invalid URL for favicon:", url, e);
+         return '/icons/default_favicon.png'; // Path to default icon in extension
+      }
+   }
+
+   // --- Options Modal ---
+   handleOptionsSubmit(evt) {
+      evt.preventDefault();
+      const form = evt.target;
+
+      if (!form.checkValidity()) {
+         form.reportValidity();
+         return;
+      }
+
+      const formData = new FormData(form);
+      const settingsToSave = {
+         use24HoursFormat: formData.has('use24HoursFormat'),
+         timeBeforeTitle: formData.has('timeBeforeTitle'),
+         sundayFirst: formData.has('sundayFirst'),
+         pageItems: parseInt(formData.get('pageItems'), 10) || 1000
+      };
+
+      browser.storage.sync.set(settingsToSave, () => {
+         if (browser.runtime.lastError) {
+            console.error("Error saving options:", browser.runtime.lastError);
+            // TODO: Notify user of save error
+         }
+         else {
+            this.options = { ...this.options, ...settingsToSave };
+            this.closeOptions(true); // Close and reload
+         }
+      });
    }
 
    openOptions() {
-      document.getElementById('options_field_24hoursformat').checked = this.options.use24HoursFormat;
-      document.getElementById('options_field_displaytitlebeforetime').checked = this.options.timeBeforeTitle;
-      document.getElementById('options_field_displaysundayfirst').checked = this.options.sundayFirst;
-      // document.getElementById('options_field_popupnbitems').value = this.options.popupNbItems;
-      document.getElementById('modal_options').style.display = 'flex';
+      const form = document.getElementById('options-form');
+      const modal = document.getElementById('modal_options');
+
+      form.elements['use24HoursFormat'].checked = this.options.use24HoursFormat;
+      form.elements['timeBeforeTitle'].checked = this.options.timeBeforeTitle;
+      form.elements['sundayFirst'].checked = this.options.sundayFirst;
+      form.elements['pageItems'].value = this.options.pageItems;
+
+      modal.style.display = 'flex';
    }
 
    closeOptions(reload = false) {
       document.getElementById('modal_options').style.display = 'none';
-      if (reload) location.reload();
+      if (reload) {
+         location.reload();
+      }
    }
 
-   saveOptions() {
-      chrome.storage.sync.set({
-         use24HoursFormat: document.getElementById('options_field_24hoursformat').checked,
-         timeBeforeTitle: document.getElementById('options_field_displaytitlebeforetime').checked,
-         sundayFirst: document.getElementById('options_field_displaysundayfirst').checked,
-         // popupNbItems: document.getElementById('options_field_popupnbitems').value
-      }, () => this.closeOptions(true));
-   }
-
+   // --- Helpers ---
+   // Return non-strings as is; basic HTML escaping for strings
    escape(string) {
-      return string
+      return typeof string !== 'string' ? string : string
          .replace(/</g, '&#x3C;')
          .replace(/>/g, '&#x3E;')
          .replace(/"/g, '&quot;')
@@ -425,19 +781,16 @@ class Application {
 
    debounce(func, wait) {
       let timeout;
-
       const debouncedFunction = function (...args) {
-         const context = this;
          clearTimeout(timeout);
-         timeout = setTimeout(() => func.apply(context, args), wait);
+         timeout = setTimeout(() => func.apply(this, args), wait);
       };
-
-      debouncedFunction.cancel = function () {
-         clearTimeout(timeout);
-      };
-
+      debouncedFunction.cancel = () => clearTimeout(timeout);
       return debouncedFunction;
    }
 }
 
-window.addEventListener('DOMContentLoaded', () => new Application());
+// Initialize App when DOM is ready
+(document.readyState === 'interactive' || document.readyState === 'complete')
+   ? new Application()
+   : window.addEventListener('DOMContentLoaded', () => new Application());

@@ -1,0 +1,79 @@
+{
+   "language": {
+      "message": "jp"
+   },
+   "application_title": {
+      "message": "より良い履歴"
+   },
+   "application_description": {
+      "message": "標準の履歴表示を、より使いやすい表示に置き換えます。"
+   },
+   "btn_delete": {
+      "message": "削除"
+   },
+   "btn_cancel": {
+      "message": "キャンセル"
+   },
+   "btn_save": {
+      "message": "保存"
+   },
+   "btn_options": {
+      "message": "設定"
+   },
+   "search_placeholder": {
+      "message": "履歴を検索"
+   },
+   "search_display": {
+      "message": "の検索結果"
+   },
+   "search_found": {
+      "message": "$count$ 件見つかりました",
+      "placeholders": {
+         "count": {
+            "content": "$1"
+         }
+      }
+   },
+   "search_empty": {
+      "message": "結果が見つかりません"
+   },
+   "history_remove_single": {
+      "message": "エントリを削除"
+   },
+   "history_remove_confirm_count": {
+      "message": "件選択中"
+   },
+   "history_date_empty": {
+      "message": "この日付の履歴エントリはありません"
+   },
+   "datepicker_go_today": {
+      "message": "今日へ移動"
+   },
+   "history_view_more": {
+      "message": "履歴ページへ移動"
+   },
+   "history_recent": {
+      "message": "最近の履歴"
+   },
+   "date_format": {
+      "message": "YYYY年M月D日 (dddd)"
+   },
+   "options_time_12_24": {
+      "message": "24時間表示を使用"
+   },
+   "options_display_time_before_title": {
+      "message": "タイトルの前に時刻を表示"
+   },
+   "options_display_calendar_sunday_first": {
+      "message": "週の始まりを日曜日にする"
+   },
+   "options_pageitems": {
+      "message": "ページあたりの最大エントリ数"
+   },
+   "pagination_prev": {
+      "message": "前へ"
+   },
+   "pagination_next": {
+      "message": "次へ"
+   }
+}

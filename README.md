@@ -8,5 +8,5 @@ The fork [approved](https://github.com/dragonofmercy/Dragon-Better-History/issue
 
 Compile all less files with
 ```sh
-less $ProjectFileDir$/css/less/history.less $ProjectFileDir$/css/application.css --clean-css="--s0 --advanced
+npx lessc css/less/history.less | npx cleancss -O1 --output css/application.css
 ```

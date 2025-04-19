@@ -1,0 +1,79 @@
+{
+   "language": {
+      "message": "ko"
+   },
+   "application_title": {
+      "message": "더 나은 방문 기록"
+   },
+   "application_description": {
+      "message": "기본 브라우저 방문 기록을 더 나은 방문 기록 보기로 바꾸세요."
+   },
+   "btn_delete": {
+      "message": "삭제"
+   },
+   "btn_cancel": {
+      "message": "취소"
+   },
+   "btn_save": {
+      "message": "저장"
+   },
+   "btn_options": {
+      "message": "설정"
+   },
+   "search_placeholder": {
+      "message": "방문 기록 검색"
+   },
+   "search_display": {
+      "message": "검색 결과:"
+   },
+   "search_found": {
+      "message": "$count$개의 결과를 찾았습니다",
+      "placeholders": {
+         "count": {
+            "content": "$1"
+         }
+      }
+   },
+   "search_empty": {
+      "message": "검색 결과 없음"
+   },
+   "history_remove_single": {
+      "message": "항목 삭제"
+   },
+   "history_remove_confirm_count": {
+      "message": "개 선택됨"
+   },
+   "history_date_empty": {
+      "message": "이 날짜의 방문 기록이 없습니다"
+   },
+   "datepicker_go_today": {
+      "message": "오늘로 이동"
+   },
+   "history_view_more": {
+      "message": "방문 기록 페이지로 이동"
+   },
+   "history_recent": {
+      "message": "최근 방문 기록"
+   },
+   "date_format": {
+      "message": "YYYY년 MMMM D일 dddd"
+   },
+   "options_time_12_24": {
+      "message": "24시간 형식 사용"
+   },
+   "options_display_time_before_title": {
+      "message": "제목 앞에 시간 표시"
+   },
+   "options_display_calendar_sunday_first": {
+      "message": "한 주의 시작을 일요일로"
+   },
+   "options_pageitems": {
+      "message": "페이지당 최대 항목 수"
+   },
+   "pagination_prev": {
+      "message": "이전"
+   },
+   "pagination_next": {
+      "message": "다음"
+   }
+}

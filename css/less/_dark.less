@@ -1,208 +1,224 @@
+// _dark.less
+// Dark color scheme overrides
+
 @media (prefers-color-scheme: dark) {
 
-    :root {
-        color-scheme: dark;
-    }
+   :root {
+      color-scheme: dark; // Dark UI elements
+   }
 
-    body {
-        background-color: @backgound-color-dark;
-        color: @text-color-dark;
+   body {
+      background-color: @background-color-dark;
+      color: @text-color-dark;
 
-        a {
-            color: @link-text-color-dark;
+      a {
+         color: @link-color-dark;
+         &:hover {}
+         &:focus-visible {
+             outline-color: @focus-ring-color-dark;
+         }
+      }
 
-            &:hover{
-                border-bottom-color: @link-text-color-dark;
+      // --- Components Dark Theme ---
+      .btn {
+         &:focus-visible { box-shadow: 0 0 0 2px @focus-ring-color-dark; }
+
+         &.btn-primary {
+            background-color: @link-color-dark;
+            border-color: @link-color-dark;
+            color: @grey-900; // Darker text
+            &:hover:not(:disabled) {
+               background-color: darken(@link-color-dark, 5%);
+               border-color: darken(@link-color-dark, 5%);
             }
-        }
+         }
 
-        .btn {
+         &.btn-grey {
+            background-color: @button-grey-background-dark;
+            color: @text-color-dark;
+            border-color: @border-color-dark;
+            &:hover:not(:disabled) {
+               background-color: lighten(@button-grey-background-dark, 5%);
+               border-color: lighten(@border-color-dark, 5%);
+            }
+         }
+      }
 
-            &.btn-primary {
-                &:hover {
-                    background-color: darken(@link-text-color-dark, 5%);
+      .entry {
+         background-color: @panel-background-color-dark;
+         box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 .5px 1px rgba(0, 0, 0, .15); // Adjusted shadow
+
+         &.selected {
+            outline-color: @link-color-dark;
+            background-color: fade(@link-color-dark, 15%);
+         }
+
+         .entry-link a {
+            color: @text-color-dark;
+             &:focus-visible {
+                 background-color: fade(@focus-ring-color-dark, 30%);
+             }
+         }
+
+         .entry-time { color: @text-color-subtle-dark; }
+
+         .entry-remove {
+            color: @icon-color-dark;
+            &:hover {
+               background-color: @grey-900;
+               color: lighten(@icon-color-dark, 20%);
+               text-decoration: none;
+            }
+            &:focus-visible { box-shadow: 0 0 0 2px @focus-ring-color-dark; }
+         }
+      }
+
+      // --- Main Layout Dark Theme ---
+      &.main {
+         .wrapper {
+            .sidebar {
+               background-color: @background-color-dark;
+               border-right-color: @border-color-dark;
+
+               .container {}
+            }
+
+            .history-container {
+                h2 span { color: @text-color-subtle-dark; } // Page count
+                .remove-confirmation {
+                   background-color: lighten(@panel-background-color-dark, 5%); // Lighter panel
+                   box-shadow: 0 2px 5px rgba(0, 0, 0, .3), 0 1px 2px rgba(0, 0, 0, .25);
                 }
+                .pagination { border-top-color: @border-color-dark; }
+                .loading-indicator { color: @text-color-subtle-dark; }
+                // .error-message { color: ... } // Keep red or choose dark-theme error color
             }
+         }
+      }
 
-            &.btn-grey {
-                background-color: @grey-btn-background-dark;
+      // --- Sidebar Content Dark Theme ---
+      .sidebar {
+          .search-structure {
+             background-color: @input-background-dark;
+             border-color: @border-color-dark;
+             &.focus {
+                border-color: lighten(@border-color-dark, 15%);
+                box-shadow: 0 0 0 2px @focus-ring-color-dark;
+             }
+             .search-icon { fill: @icon-color-dark; }
+             .search-input { color: @text-color-dark; } // Input text
+             .search-clear {
+                 color: @icon-color-dark;
+                 &:hover {
+                     background-color: @grey-900;
+                     color: lighten(@icon-color-dark, 20%);
+                 }
+                 &:focus-visible { box-shadow: 0 0 0 2px @focus-ring-color-dark; }
+             }
+          }
+          .nav .content { /* Nav background inherits */ }
+          .footer .content {
+              border-top-color: @border-color-dark;
+              color: @text-color-subtle-dark;
+              a { color: @link-color-dark; }
+          }
+      }
 
-                &:hover {
-                    background-color: lighten(@grey-btn-background-dark, 5%);
-                }
+      // --- Modal Dark Theme ---
+      .modal {
+         background-color: rgba(0, 0, 0, .4); // Darker
+         .modal-content { background-color: @panel-background-color-dark; }
+         .modal-heading .close {
+             color: @icon-color-dark;
+             &:hover {
+                 background-color: @grey-900;
+                 color: lighten(@icon-color-dark, 20%);
+             }
+             &:focus-visible { box-shadow: 0 0 0 2px @focus-ring-color-dark; }
+         }
+         .modal-footer { border-top-color: @border-color-dark; }
+      }
+
+      // --- Forms Dark Theme ---
+      .form-group {
+         input[type=number] {
+            background-color: @input-background-dark;
+            border-color: @border-color-dark;
+            color: @text-color-dark; // Input text
+            &:focus {
+                border-color: @link-color-dark;
+                box-shadow: 0 0 0 2px @focus-ring-color-dark;
             }
-        }
+         }
+      }
 
-        .entry {
-            background-color: @panel-background-color-dark;
-
-            &.selected {
-                box-shadow: @link-text-color-dark 0 0 0 1.5px;
-                background-color: @grey-btn-background-dark;
-            }
-
-            .entry-link {
-                a {
-                    color: @text-color-dark;
-                }
-            }
-
-            .entry-time {
-                color: @text-grey-color-dark;
-            }
-
-            .entry-remove {
-                svg {
-                    fill: @text-color-dark;
-                }
-
-                &:hover {
-                    background-color: @backgound-color-dark;
-                }
-            }
-        }
-
-        &.main {
-            .wrapper {
-                .sidebar {
-                    background-color: @backgound-color-dark;
-                    border-right-color: @border-color-dark;
-
-                    .container {
-
-                        &>.search {
-                            &>.content {
-                                .search-structure {
-                                    background-color: @input-background-dark;
-                                    border-color: @border-color-dark;
-
-                                    &.focus {
-                                        box-shadow: 0 0 0 1px lighten(@border-color-dark, 10%) inset;
-                                        border-color: lighten(@border-color-dark, 10%);
-                                    }
-
-                                    svg {
-                                        fill: @text-color-dark;
-                                    }
-
-                                    .search-clear {
-                                        &:hover {
-                                            background-color: @backgound-color-dark;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        &>.footer {
-                            border-top-color: @border-color-dark;
-                        }
-                    }
-                }
-
-                .history-container {
-                    .gutter {
-                        .remove-confirmation {
-                            background-color: @panel-background-color-dark;
-                        }
-                    }
-                }
-            }
-        }
-
-        .form-group {
-
-            input[type=number] {
-                background-color: @backgound-color-dark;
-                border-color: #858585;
-                outline: none;
-            }
-
-        }
-
-        .modal {
-            .modal-content {
-                background-color: @panel-background-color-dark;
-
-                .modal-heading {
-                    .close {
-                        svg {
-                            fill: @text-color-dark;
-                        }
-                        &:hover {
-                            background-color: @backgound-color-dark;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    .ic__container {
-        background: darken(@panel-background-color-dark, 5%);
-    }
-
-    .ic__month-select,
-    .ic__year-select {
-        background-color: @input-background-dark;
-    }
-
-    .ic__prev div {
-        border-right-color: @text-color-dark;
-    }
-
-    .ic__next div {
-        border-left-color: @text-color-dark;
-    }
-
-    .ic__header,
-    .ic__prev,
-    .ic__next {
-        background-color: @panel-background-color-dark;
-    }
-
-    .ic__prev:hover,
-    .ic__next:hover {
-        background-color: lighten(@border-color-dark, 10%);
-    }
-
-    .ic__week-head td {
-        border: 1px solid @border-color-dark;
-        color: @text-grey-color-dark;
-    }
-
-    .ic__days td {
-        border: 1px solid @border-color-dark;
-        color: @text-color-dark;
-    }
-
-    .ic__days .ic__day {
-        background: lighten(@backgound-color-dark, .5%);
-    }
-
-    .ic__days .ic__day:hover:not(.ic__day_state_disabled) {
-        background: darken(@link-text-color-dark, 30%);
-    }
-
-    .ic__days .ic__day-empty {
-        background-image: linear-gradient(135deg,
-        darken(@border-color-dark, 2%) 25%,
-        darken(@border-color-dark, 5%) 25%,
-        darken(@border-color-dark, 5%) 50%,
-        darken(@border-color-dark, 2%) 50%,
-        darken(@border-color-dark, 2%) 75%,
-        darken(@border-color-dark, 5%) 75%,
-        darken(@border-color-dark, 5%) 100%);
-
-        background-size: 5px 5px;
-    }
-
-    .ic__days .ic__day_state_current {
-        background: darken(@link-text-color-dark, 20%);
-    }
-
-    .ic__days .ic__day_state_selected {
-        background: lighten(@border-color-dark, 10%);
-        color: @text-color-dark;
-    }
+      // --- Calendar Dark Theme ---
+      .ic__container {
+         background: @background-color-dark;
+         border-color: @border-color-dark;
+      }
+      .ic__header {
+         // background: lighten(@panel-background-color-dark, 5%); // Lighter
+         background: @panel-background-color-dark;
+         border-bottom-color: @border-color-dark;
+      }
+      .ic__prev, .ic__next {
+         color: @icon-color-dark;
+         &:hover:not(.disabled) {
+            background-color: lighten(@panel-background-color-dark, 10%);
+            color: lighten(@icon-color-dark, 20%);
+         }
+         &:focus-visible { box-shadow: 0 0 0 2px @focus-ring-color-dark inset; }
+      }
+      .ic__month select, .ic__year select {
+         background-color: @input-background-dark;
+         border-color: @border-color-dark;
+         color: @text-color-dark;
+         &:focus, &:focus-visible {
+             border-color: @link-color-dark;
+             box-shadow: 0 0 0 2px @focus-ring-color-dark;
+         }
+      }
+      .ic__week-head td {
+         border-bottom-color: @border-color-dark;
+         border-left-color: @border-color-dark;
+         color: @text-color-subtle-dark;
+      }
+      .ic__days td {
+         border-top-color: lighten(@border-color-dark, 1%);
+         border-left-color: lighten(@border-color-dark, 1%);
+         color: @text-color-dark;
+      }
+      .ic__days .ic__day {
+         // background: @panel-background-color-dark;
+         background: darken(@panel-background-color-dark, 1%);
+         &:hover:not(.ic__day_state_disabled) {
+            background: lighten(@link-color-dark, 10%);
+            color: @grey-900; // Dark text
+         }
+         &:focus-visible:not(.ic__day_state_disabled) {
+             box-shadow: 0 0 0 2px @focus-ring-color-dark inset;
+         }
+      }
+      .ic__days .ic__day-empty {
+         background-color: @grey-900;
+         background-image: linear-gradient(135deg, @grey-800 25%, transparent 25%, transparent 50%, @grey-800 50%, @grey-800 75%, transparent 75%, transparent 100%);
+         background-size: 6px 6px;
+      }
+      .ic__days .ic__day_state_current {
+         font-weight: bold;
+         color: @link-color-dark;
+         background: none;
+      }
+      .ic__days .ic__day_state_selected {
+         background: @link-color-dark;
+         color: @grey-900; // Dark text
+         font-weight: bold;
+         &:hover:not(.ic__day_state_disabled) {
+            background: darken(@link-color-dark, 5%);
+            color: @grey-900;
+         }
+      }
+      // .ic__days .ic__day_state_disabled { opacity: .5; } // Inherits from light theme is fine
+   }
 }

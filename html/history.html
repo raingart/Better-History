@@ -11,7 +11,13 @@
    <link rel="stylesheet" href="/css/application.css">
    <link rel="stylesheet" href="/css/switch_checkbox.css">
 
-   <script src="/js/libs/moment.js"></script>
+   <script src="/js/libs/browser-support.js"></script>
+
+   <!-- source https://cdnjs.com/libraries/dayjs -->
+   <script src="/js/libs/dayjs/dayjs.min.js"></script>
+   <script src="/js/libs/dayjs/plugin/customParseFormat.min.js"></script>
+   <!-- <script src="/js/libs/dayjs/plugin/localizedFormat.min.js"></script> -->
+   <script src="/js/libs/dayjs/plugin/localeData.min.js"></script>
 
    <script type="module" src="/js/calendar.js"></script>
    <script type="module" src="/js/history.js"></script>
@@ -113,25 +119,32 @@
                      fill-rule="nonzero"></path>
                </svg></div>
          </div>
-         <div class="modal-body">
-            <h1 i18n="btn_options"></h1>
-            <div class="form-group">
-               <label i18n="options_time_12_24"></label>
-               <input id="options_field_24hoursformat" type="checkbox" tabindex="-1" value="1" />
+         <form id="options-form">
+            <div class="modal-body">
+               <h1 i18n="btn_options"></h1>
+               <div class="form-group">
+                  <label for="options_field_24hoursformat" i18n="options_time_12_24"></label>
+                  <input id="options_field_24hoursformat" name="use24HoursFormat" type="checkbox" value="1" />
+               </div>
+               <div class="form-group">
+                  <label for="options_field_displaytitlebeforetime" i18n="options_display_time_before_title"></label>
+                  <input id="options_field_displaytitlebeforetime" name="timeBeforeTitle" type="checkbox" value="1" />
+               </div>
+               <div class="form-group">
+                  <label for="options_field_displaysundayfirst" i18n="options_display_calendar_sunday_first"></label>
+                  <input id="options_field_displaysundayfirst" name="sundayFirst" type="checkbox" value="1" />
+               </div>
+               <div class="form-group">
+                  <label for="options_field_pageitems" i18n="options_pageitems"></label>
+                  <input id="options_field_pageitems" name="pageItems" type="number" min="10" max="1500" value="500"
+                     required />
+               </div>
             </div>
-            <div class="form-group">
-               <label i18n="options_display_time_before_title"></label>
-               <input id="options_field_displaytitlebeforetime" type="checkbox" tabindex="-1" value="1" />
+            <div class="modal-footer">
+               <button type="submit" i18n="btn_save" id="options_save" class="btn btn-primary"></button>
+               <button type="button" i18n="btn_cancel" id="options_cancel" class="btn btn-grey"></button>
             </div>
-            <div class="form-group">
-               <label i18n="options_display_calendar_sunday_first"></label>
-               <input id="options_field_displaysundayfirst" type="checkbox" tabindex="-1" value="1" />
-            </div>
-         </div>
-         <div class="modal-footer">
-            <button i18n="btn_save" id="options_save" class="btn btn-primary"></button>
-            <button i18n="btn_cancel" id="options_cancel" class="btn btn-grey"></button>
-         </div>
+         </form>
       </div>
    </div>
 

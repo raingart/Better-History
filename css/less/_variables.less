@@ -1,0 +1,68 @@
+// _variables.less
+
+// Color Palette (Examples - Adjust to your scheme)
+@white: #ffffff;
+@black: #000000;
+@grey-100: #f7f7f7; // Lightest grey / background
+@grey-200: #ededed; // Light subtle background / grey button
+@grey-300: #bebebe; // Light border
+@grey-500: #858585; // Medium grey (e.g., dark number input border)
+@grey-600: #717171; // Medium-dark grey text
+@grey-700: #4d4d4d; // Dark grey button background
+@grey-800: #3b3b3b; // Dark border / panel background
+@grey-900: #333333; // Dark background
+@grey-text: #262626; // Primary text color light theme
+
+@blue-light: #4ea1e1; // Link dark theme
+@blue-dark: #0072c9; // Link light theme
+
+@red-error: #ff0800; // Example error/invalid color
+
+// Semantic Variables - Light Theme
+@background-color: @grey-100;
+@text-color: @grey-text;
+@text-color-subtle: @grey-600;
+@link-color: @blue-dark;
+@border-color: @grey-300;
+@input-background: @white;
+@panel-background-color: @white;
+@button-grey-background: @grey-200;
+@icon-color: @grey-600;
+@focus-ring-color: fade(@blue-dark, 50%); // Semi-transparent focus
+
+// Semantic Variables - Dark Theme
+@background-color-dark: @grey-900;
+@text-color-dark: #ddd; // Use specific light grey for dark theme text
+@text-color-subtle-dark: #9d9d9d;
+@link-color-dark: @blue-light;
+@border-color-dark: @grey-800;
+@input-background-dark: #2b2b2b; // Specific dark input bg
+@panel-background-color-dark: @grey-800;
+@button-grey-background-dark: @grey-700;
+@icon-color-dark: @text-color-dark;
+// @icon-color-dark: #4ea1e1;
+@focus-ring-color-dark: fade(@blue-light, 60%);
+
+// Layout & Spacing (Examples)
+@spacing-lm: 2px;
+@spacing-xs: 4px;
+@spacing-sm: 8px;
+@spacing-md: 12px;
+@spacing-lg: 16px;
+@spacing-xl: 20px;
+@spacing-xxl: 30px;
+
+@sidebar-width: 340px;
+@popup-width: 650px;
+
+// Font Sizes (Examples)
+@font-size-xs: 9px;   // Calendar day/header - Use cautiously
+@font-size-sm: 12px;  // Entry time
+@font-size-base: 14px; // Body text, buttons
+@font-size-md: 16px;  // Popup h1
+@font-size-lg: 20px;  // h2
+@font-size-xl: 24px;  // h1
+
+// Other
+@border-radius-sm: 2px;
+@border-radius-md: 4px;

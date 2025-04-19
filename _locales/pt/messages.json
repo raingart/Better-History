@@ -1,0 +1,79 @@
+{
+   "language": {
+      "message": "pt"
+   },
+   "application_title": {
+      "message": "Melhor Histórico"
+   },
+   "application_description": {
+      "message": "Substitua o histórico padrão do navegador por esta exibição de histórico aprimorada."
+   },
+   "btn_delete": {
+      "message": "Excluir"
+   },
+   "btn_cancel": {
+      "message": "Cancelar"
+   },
+   "btn_save": {
+      "message": "Salvar"
+   },
+   "btn_options": {
+      "message": "Opções"
+   },
+   "search_placeholder": {
+      "message": "Pesquisar no histórico"
+   },
+   "search_display": {
+      "message": "Resultados da pesquisa para"
+   },
+   "search_found": {
+      "message": "$count$ resultado(s) encontrado(s)",
+      "placeholders": {
+         "count": {
+            "content": "$1"
+         }
+      }
+   },
+   "search_empty": {
+      "message": "Nenhum resultado encontrado"
+   },
+   "history_remove_single": {
+      "message": "Remover entrada"
+   },
+   "history_remove_confirm_count": {
+      "message": "selecionado(s)"
+   },
+   "history_date_empty": {
+      "message": "Não há entradas no histórico para este dia"
+   },
+   "datepicker_go_today": {
+      "message": "Ir para Hoje"
+   },
+   "history_view_more": {
+      "message": "Ir para a página de Histórico"
+   },
+   "history_recent": {
+      "message": "Histórico Recente"
+   },
+   "date_format": {
+      "message": "dddd, D [de] MMMM [de] YYYY"
+   },
+   "options_time_12_24": {
+      "message": "Usar formato de 24 horas"
+   },
+   "options_display_time_before_title": {
+      "message": "Exibir hora antes do título"
+   },
+   "options_display_calendar_sunday_first": {
+      "message": "A semana começa no domingo"
+   },
+   "options_pageitems": {
+      "message": "Máx. de entradas por página"
+   },
+   "pagination_prev": {
+      "message": "Anterior"
+   },
+   "pagination_next": {
+      "message": "Próximo"
+   }
+}

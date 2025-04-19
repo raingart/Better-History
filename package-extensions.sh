@@ -21,6 +21,8 @@ zip -q -r $filename \
                   icons/128.png \
                   js/*.js \
                   js/*/*.js \
+                  js/libs/dayjs/*.js \
+                  js/libs/dayjs/plugin/*.js \
                   manifest.json \
  --exclude="*/-*.*" \
 #  -x \*.DS_Store

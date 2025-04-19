@@ -1,218 +1,141 @@
+// _reset.less
+// Based on Normalize.css principles - sets sensible defaults
+
 html {
-    font-family: sans-serif;
-    -ms-text-size-adjust: 100%;
-    -webkit-text-size-adjust: 100%;
-}
+   font-family: sans-serif;
+   line-height: 1.15; // Correct line height.
+   -webkit-text-size-adjust: 100%; // Prevent font size adjustments on iOS.
+ }
 
-body {
-    margin: 0;
-}
+ body {
+   margin: 0; // Remove default margin.
+ }
 
-article,
-aside,
-details,
-figcaption,
-figure,
-footer,
-header,
-hgroup,
-main,
-menu,
-nav,
-section,
-summary {
-    display: block;
-}
+ main { display: block; } // Ensure `main` renders consistently in IE.
 
-audio,
-canvas,
-progress,
-video {
-    display: inline-block;
-    vertical-align: baseline;
-}
+ h1 {
+   font-size: 2em;
+   margin: .67em 0;
+ }
 
-audio:not([controls]) {
-    display: none;
-    height: 0;
-}
+ hr {
+   box-sizing: content-box; // For Firefox.
+   height: 0; // Show overflow in Edge/IE.
+   overflow: visible;
+ }
 
-[hidden],
-template {
-    display: none;
-}
+ pre {
+   font-family: monospace, monospace;
+   font-size: 1em;
+   overflow: auto;
+ }
 
-a {
-    background-color: transparent;
-}
+ a { background-color: transparent; } // Remove gray background on active links in IE 10
 
-a:active,
-a:hover {
-    outline: 0;
-}
+ abbr[title] {
+   border-bottom: none;
+   text-decoration: underline dotted; // Consistent underline.
+ }
 
-abbr[title] {
-    border-bottom: none;
-    text-decoration: underline;
-    text-decoration: underline dotted;
-}
+ b, strong { font-weight: bolder; } // Ensure correct font weight.
 
-b,
-strong {
-    font-weight: bold;
-}
+ code, kbd, samp {
+   font-family: monospace, monospace;
+   font-size: 1em;
+ }
 
-dfn {
-    font-style: italic;
-}
+ small { font-size: 80%; }
 
-h1 {
-    font-size: 2em;
-    margin: 0.67em 0;
-}
+ sub, sup {
+   font-size: 75%;
+   line-height: 0;
+   position: relative;
+   vertical-align: baseline;
+ }
+ sup { top: -.5em; }
+ sub { bottom: -.25em; }
 
-mark {
-    background: #ff0;
-    color: #000;
-}
+ img { border-style: none; } // Remove border on images in links in IE 10
 
-small {
-    font-size: 80%;
-}
+ button, input, optgroup, select, textarea {
+   font: inherit; // Inherit font styles.
+   margin: 0; // Remove margin in Firefox/Safari.
+ }
 
-sub,
-sup {
-    font-size: 75%;
-    line-height: 0;
-    position: relative;
-    vertical-align: baseline;
-}
+ button, input { overflow: visible; } // Show overflow in Edge.
 
-sup {
-    top: -0.5em;
-}
+ button, select { text-transform: none; } // Prevent text transform in Firefox.
 
-sub {
-    bottom: -0.25em;
-}
+ button, [type="button"], [type="reset"], [type="submit"] {
+   // -webkit-appearance: button; - Removed
+ }
 
-img {
-    border: 0;
-}
+ button::-moz-focus-inner, [type="button"]::-moz-focus-inner,
+ [type="reset"]::-moz-focus-inner, [type="submit"]::-moz-focus-inner {
+   border: 0;
+   padding: 0;
+ }
 
-svg:not(:root) {
-    overflow: hidden;
-}
+ button:-moz-focusring, [type="button"]:-moz-focusring,
+ [type="reset"]:-moz-focusring, [type="submit"]:-moz-focusring {
+   outline: 1px dotted ButtonText; // Restore focus style.
+ }
 
-figure {
-    margin: 1em 40px;
-}
+ fieldset { padding: .35em .75em .625em; } // Correct padding in Firefox.
 
-hr {
-    box-sizing: content-box;
-    height: 0;
-}
+ legend {
+   box-sizing: border-box;
+   color: inherit; // Inherit color from fieldset in IE.
+   display: table;
+   max-width: 100%;
+   padding: 0; // Remove padding for consistency.
+   white-space: normal;
+ }
 
-pre {
-    overflow: auto;
-}
+ textarea { overflow: auto; } // Remove default vertical scrollbar in IE 10+.
 
-code,
-kbd,
-pre,
-samp {
-    font-family: monospace, monospace;
-    font-size: 1em;
-}
+ [type="checkbox"], [type="radio"] {
+   box-sizing: border-box;
+   padding: 0;
+ }
 
-button,
-input,
-optgroup,
-select,
-textarea {
-    color: inherit;
-    font: inherit;
-    margin: 0;
-}
+ [type="number"]::-webkit-inner-spin-button,
+ [type="number"]::-webkit-outer-spin-button {
+   height: auto; // Correct cursor style in Chrome.
+ }
 
-button {
-    overflow: visible;
-}
+ [type="search"] {
+   // -webkit-appearance: textfield; - Removed
+   outline-offset: -2px; // Correct outline in Safari.
+ }
 
-button,
-select {
-    text-transform: none;
-}
+ [type="search"]::-webkit-search-decoration {
+   -webkit-appearance: none; // Remove inner padding/buttons in macOS Chrome/Safari.
+ }
 
-button,
-html input[type="button"], // 1
-input[type="reset"],
-input[type="submit"] {
-    -webkit-appearance: button; // 2
-    cursor: pointer; // 3
-}
+ ::-webkit-file-upload-button {
+   -webkit-appearance: button;
+   font: inherit; // Inherit font in Safari.
+ }
 
-button[disabled],
-html input[disabled] {
-    cursor: default;
-}
+ details { display: block; } // Correct display in Edge/IE/Firefox.
+ summary { display: list-item; } // Correct display.
+ template { display: none; } // Correct display in IE 10+.
+ [hidden] { display: none; } // Correct display in IE 10+.
 
-button::-moz-focus-inner,
-input::-moz-focus-inner {
-    border: 0;
-    padding: 0;
-}
-
-input {
-    line-height: normal;
-}
-
-input[type="checkbox"],
-input[type="radio"] {
-    box-sizing: border-box;
-    padding: 0;
-}
-
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-    height: auto;
-}
-
-input[type="search"] {
-    -webkit-appearance: textfield; // 1
-    box-sizing: content-box; //2
-}
-
-input[type="search"]::-webkit-search-cancel-button,
-input[type="search"]::-webkit-search-decoration {
-    -webkit-appearance: none;
-}
-
-fieldset {
-    border: 1px solid #c0c0c0;
-    margin: 0 2px;
-    padding: 0.35em 0.625em 0.75em;
-}
-
-legend {
-    border: 0;
-    padding: 0;
-}
-
-textarea {
-    overflow: auto;
-}
-
-optgroup {
-    font-weight: bold;
-}
-
-table {
-    border-collapse: collapse;
-    border-spacing: 0;
-}
-
-td,
-th {
-    padding: 0;
-}
+ // Custom invalid style
+ input[type=number]:invalid {
+   box-shadow: 0 0 0 1px @red-error;
+   border-color: @red-error;
+   &:focus {
+     outline: none;
+     box-shadow: 0 0 0 2px @focus-ring-color, 0 0 0 1px @red-error;
+   }
+ }
+ #search_input::-webkit-search-decoration,
+ #search_input::-webkit-search-cancel-button,
+ #search_input::-webkit-search-results-button,
+ #search_input::-webkit-search-results-decoration {
+     -webkit-appearance: none; // remove default browser clear input icon
+     display: none;
+ }

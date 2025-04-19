@@ -66,5 +66,23 @@
    },
    "options_display_calendar_sunday_first": {
       "message": "Début de la semaine dimanche"
+   },
+   "options_pageitems": {
+      "message": "Nombre max d'entrées par page"
+   },
+   "pagination_prev": {
+      "message": "Précédent"
+   },
+   "pagination_next": {
+      "message": "Suivant"
+   },
+   "options_pageitems": {
+      "message": "Sayfa başına maks. öğe sayısı"
+   },
+   "pagination_prev": {
+      "message": "Önceki"
+   },
+   "pagination_next": {
+      "message": "Sonraki"
    }
 }

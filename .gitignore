@@ -7,3 +7,4 @@ Desktop.ini
 .DS_Store*
 *.log
 .github
+node_modules

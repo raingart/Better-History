@@ -66,5 +66,14 @@
    },
    "options_display_calendar_sunday_first": {
       "message": "The week begins on Sunday"
+   },
+   "options_pageitems": {
+      "message": "Max entries per page"
+   },
+   "pagination_prev": {
+      "message": "Previous"
+   },
+   "pagination_next": {
+      "message": "Next"
    }
 }

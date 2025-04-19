@@ -66,5 +66,14 @@
    },
    "options_display_calendar_sunday_first": {
       "message": "一周的开始是周日"
+   },
+   "options_pageitems": {
+      "message": "每页最大条目数"
+   },
+   "pagination_prev": {
+      "message": "上一页"
+   },
+   "pagination_next": {
+      "message": "下一页"
    }
 }

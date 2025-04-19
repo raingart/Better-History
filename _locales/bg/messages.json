@@ -66,5 +66,14 @@
    },
    "options_display_calendar_sunday_first": {
       "message": "Начало на седмицата неделя"
+   },
+   "options_pageitems": {
+      "message": "Макс. брой записи на страница"
+   },
+   "pagination_prev": {
+      "message": "Предишна"
+   },
+   "pagination_next": {
+      "message": "Следваща"
    }
 }
