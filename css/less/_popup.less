@@ -22,17 +22,22 @@ body.popup {
             display: none; // Hide day headers
          }
 
+         .remove-confirmation {
+            right: 20%; // not to overlap #go_history
+         }
+
          #go_history {
-             font-size: @font-size-sm; // Smaller link text
+            float: right;
+            font-size: @font-size-sm; // Smaller link text
          }
 
          .history-day {
-             // Popup-specific entry styles if needed
-             // .entry { font-size: @font-size-sm; }
+            // Popup-specific entry styles if needed
+            // .entry { font-size: @font-size-sm; }
          }
 
          .pagination {
-             display: none; // Hide pagination in popup
+            display: none; // Hide pagination in popup
          }
       }
    }

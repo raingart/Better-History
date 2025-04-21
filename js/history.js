@@ -75,6 +75,7 @@ class Application {
    // --- Popup Initialization ---
    initPopup() {
       this.historyGetDay(this.today);
+      this.setupHistoryEntryManager();
       document.getElementById('go_history').addEventListener('click', this.openHistoryPage.bind(this));
    }
 
@@ -98,7 +99,15 @@ class Application {
    setupMainElements() {
       this.setupOptionButtons();
       this.setupSearch();
-      this.setupHistoryNavigation();
+      this.setupHistoryEntryManager();
+
+      const goToday = document.getElementById('go_today');
+
+      goToday.addEventListener('click', e => {
+         e.preventDefault();
+         this.historyGetDay(this.today);
+         this.calendar?.selectToday();
+      });
    }
 
    setupOptionButtons() {
@@ -142,16 +151,9 @@ class Application {
       searchInput.focus();
    }
 
-   setupHistoryNavigation() {
-      const goToday = document.getElementById('go_today');
+   setupHistoryEntryManager() {
       const clearConfirm = document.getElementById('clear_confirm');
       const clearCancel = document.getElementById('clear_cancel');
-
-      goToday.addEventListener('click', e => {
-         e.preventDefault();
-         this.historyGetDay(this.today);
-         this.calendar?.selectToday();
-      });
 
       clearConfirm.addEventListener('click', e => {
          e.preventDefault();
@@ -537,9 +539,8 @@ class Application {
             this.multiSelectLastEntry = isSelected ? this.multiSelectLastEntry : entryElement; // Update last if selecting
          }
          else {
-            // Normal click: Clear others, select this one
-            document.querySelectorAll('.history-container .entry.selected')
-               .forEach(el => el.classList.remove('selected'));
+            // document.querySelectorAll('.history-container .entry.selected') // Normal click: Clear others, select this one
+            //    .forEach(el => el.classList.remove('selected'));
             entryElement.classList.add('selected');
             this.multiSelectLastEntry = entryElement;
          }

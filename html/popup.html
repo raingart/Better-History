@@ -10,7 +10,13 @@
 
    <link rel="stylesheet" href="/css/application.css">
 
-   <script src="/js/libs/moment.js"></script>
+   <script src="/js/libs/browser-support.js"></script>
+
+   <!-- source https://cdnjs.com/libraries/dayjs -->
+   <script src="/js/libs/dayjs/dayjs.min.js"></script>
+   <script src="/js/libs/dayjs/plugin/customParseFormat.min.js"></script>
+   <!-- <script src="/js/libs/dayjs/plugin/localizedFormat.min.js"></script> -->
+   <script src="/js/libs/dayjs/plugin/localeData.min.js"></script>
 
    <script type="module" src="/js/calendar.js"></script>
    <script type="module" src="/js/history.js"></script>
@@ -20,6 +26,14 @@
 
    <div class="wrapper">
       <div class="history-container">
+         <div class="gutter">
+            <div class="remove-confirmation">
+               <span class="num">0</span>
+               <span i18n="history_remove_confirm_count"></span>
+               <button i18n="btn_delete" id="clear_confirm" class="btn btn-primary"></button>
+               <button i18n="btn_cancel" id="clear_cancel" class="btn btn-grey"></button>
+            </div>
+         </div>
          <a i18n="history_view_more" id="go_history"></a>
          <h1 i18n="history_recent"></h1>
          <div class="content"></div>
