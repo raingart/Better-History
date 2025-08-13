@@ -482,6 +482,26 @@ class IonCalendar {
       this.#selectDay();
    }
 
+   /**
+    * Selects a date, defaults to today if none provided.
+    * @param {Date|Dayjs|string} [dateToSelect=dayjs()] - Date to select.
+    */
+   selectDate(dateToSelect) {
+      const newDate = dayjs(dateToSelect); // Defaults to today if undefined
+
+      if (!newDate.isValid()) {
+         console.warn('Cannot select date, invalid input.', dateToSelect);
+         return;
+      }
+      if (this.#isMaxDay(newDate)) {
+         console.warn('Cannot select date, exceeds maxDate.', newDate.format());
+         return;
+      }
+
+      this.#timeNowLocal = newDate;
+      this.#selectDay();
+   }
+
    #isMaxDay(dayjsDate) {
       if (!this.#maxDateObject) return false;
       // Check if day is strictly after maxDate

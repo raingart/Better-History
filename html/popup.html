@@ -10,22 +10,28 @@
 
    <link rel="stylesheet" href="/css/application.css">
 
-   <script src="/js/libs/browser-support.js"></script>
+   <script src="/js/libs/browser-support.js" defer></script>
 
    <!-- source https://cdnjs.com/libraries/dayjs -->
-   <script src="/js/libs/dayjs/dayjs.min.js"></script>
-   <script src="/js/libs/dayjs/plugin/customParseFormat.min.js"></script>
-   <!-- <script src="/js/libs/dayjs/plugin/localizedFormat.min.js"></script> -->
-   <script src="/js/libs/dayjs/plugin/localeData.min.js"></script>
+   <script src="/js/libs/dayjs/dayjs.min.js" defer></script>
+   <script src="/js/libs/dayjs/plugin/customParseFormat.min.js" defer></script>
+   <!-- <script src="/js/libs/dayjs/plugin/localizedFormat.min.js" defer></script> -->
+   <script src="/js/libs/dayjs/plugin/localeData.min.js" defer></script>
 
-   <script type="module" src="/js/calendar.js"></script>
-   <script type="module" src="/js/history.js"></script>
+   <script type="module" src="/js/calendar.js" defer></script>
+   <script type="module" src="/js/history.js" defer></script>
 </head>
 
 <body class="popup">
 
    <div class="wrapper">
-      <div class="history-container">
+      <main class="history-container">
+
+         <header>
+            <h1 i18n="history_recent"></h1>
+            <a i18n="history_view_more" id="go_history" title="Open a full history in a new tab"></a>
+         </header>
+
          <div class="gutter">
             <div class="remove-confirmation">
                <span class="num">0</span>
@@ -37,7 +43,7 @@
          <a i18n="history_view_more" id="go_history"></a>
          <h1 i18n="history_recent"></h1>
          <div class="content"></div>
-      </div>
+      </main>
    </div>
 
 </body>

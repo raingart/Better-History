@@ -103,16 +103,17 @@
             }
 
             .history-container {
+               &.is-loading::before {
+                  background-color: fade(@background-color-dark, 80%);
+                  color: @text-color-dark;
+               }
+
                h2 span {
                   color: @text-color-subtle-dark;
                }
 
                .pagination {
                   border-top-color: @border-color-dark;
-               }
-
-               .loading-indicator {
-                  color: @text-color-subtle-dark;
                }
 
                // .error-message { color: ... } // Keep red or choose dark-theme error color
@@ -169,14 +170,10 @@
       }
 
       // --- Modal Dark Theme ---
-      .modal {
-         background-color: rgba(0, 0, 0, .4); // Darker
+      dialog {
+         background-color: @panel-background-color-dark;
 
-         .modal-content {
-            background-color: @panel-background-color-dark;
-         }
-
-         .modal-heading .close {
+         header .close {
             color: @icon-color-dark;
 
             &:hover {
@@ -189,7 +186,7 @@
             }
          }
 
-         .modal-footer {
+         footer {
             border-top-color: @border-color-dark;
          }
       }

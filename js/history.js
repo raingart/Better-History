@@ -6,7 +6,75 @@ dayjs.extend(dayjs_plugin_localeData);
 // dayjs.locale('en') // https://cdn.jsdelivr.net/npm/dayjs@1/locale/zh-cn.js
 
 class Application {
+   static DEFAULTS = {
+      PAGE_ITEMS: 1000,
+      MAX_HISTORY_RESULTS: 10000,
+   };
+
+   static SELECTORS = {
+      // Containers
+      historyContainer: '.history-container',
+      contentContainer: '.history-container .content',
+      sidebarNavContent: '.sidebar .nav .content',
+
+      // Calendar
+      calendar: '.calendar',
+
+      // Navigation
+      goToday: '#go_today',
+      goHistory: '#go_history',
+      goOptions: '#go_options',
+
+      // Search
+      searchInput: '#search_input',
+      searchClear: '#search_clear',
+      searchContainer: '.search-structure',
+
+      // Settings modal
+      optionsModal: '#modal-options',
+      optionsForm: '#options-form',
+      optionsClose: '#modal-close',
+
+      // Delete confirmation modal
+      removeConfirmation: '.remove-confirmation',
+      confirmButton: '#clear_confirm',
+      cancelButton: '#clear_cancel',
+
+      // Dynamic elements
+      entry: '.entry',
+      entryLink: '.entry-link a',
+      entryRemove: '.entry-remove',
+      selectedEntry: '.entry.selected',
+      prevPageButton: '#prev_page',
+      nextPageButton: '#next_page',
+   };
+
+   // Cached DOM elements
+   dom = {};
+
+   // Default options, may be overridden by saved settings
+   options;
+
+   // State variables
+   state;
+   #now;
+   #today;
+   #throttleSearch;
+   #calendar;
+   #lastScrollPosition = 0;
+
    constructor() {
+      this.state = {
+         isLoading: true,
+         isSearching: false,
+         searchQuery: '',
+         currentPage: 1,
+         currentDay: null,
+         controlPressed: false,
+         shiftPressed: false,
+         multiSelectLastUrl: null, // Store the latest click for Shift+Select
+         selectedUrls: new Set(),  // Store the URL of all selected elements
+      };
       // Default options, may be overridden by saved settings
       this.options = {
          use24HoursFormat: true,
@@ -15,187 +83,211 @@ class Application {
          pageItems: 1000,
       };
       // State variables
-      this.now = null;
-      this.today = null;
-      this.currentDay = null;
-      this.isSearching = false;
-      this.isLoading = false;
-      this.controlPressed = false;
-      this.shiftPressed = false;
-      this.multiSelectLastEntry = null;
-      this.currentPage = 1;
-      this.searchQuery = '';
-      this.throttleSearch = null;
+      this.#now = new Date();
+      this.#today = Application.#getToday();
+      this.#throttleSearch = Application.#debounce(this.#historySearch.bind(this), 500);
+      this.#calendar = null;
 
-      this.refreshTime(); // Initial time setup
-      this.init();        // Start initialization
+      this.#cacheDOMElements();
+      this.init();
    }
 
-   init() {
-      this.i18n();
+   async init() {
+      Application.#i18n();
 
       // Set Day.js locale based on browser language preference
       try {
-         const currentLocale = this.getCurrentLocale();
+         const currentLocale = Application.#getCurrentLocale();
          if (dayjs.locale() !== currentLocale) dayjs.locale(currentLocale);
-      } catch (e) {
-         console.warn(`Day.js locale '${this.getCurrentLocale()}' failed to load. Falling back to '${dayjs.locale()}'.`, e);
+      } catch (err) {
+         console.warn(`Day.js locale '${Application.#getCurrentLocale()}' failed to load.`, err);
       }
 
-      // Determine default for sundayFirst based on the current Day.js locale
-      let defaultSundayFirst = false;
+      const defaultSundayFirst = dayjs.localeData().firstDayOfWeek() === 0;
+
       try {
-         defaultSundayFirst = dayjs.localeData().firstDayOfWeek() === 0; // 0 = Sunday
-      } catch (e) {
-         console.error("Failed to get locale data for sundayFirst default.", e);
+         const items = await Application.#promisify(browser.storage.sync, 'get', null);
+         this.#setOptions(items, defaultSundayFirst);
+      } catch (error) {
+         console.error('Failed to initialize settings:', error);
       }
 
-      browser.storage.sync.get(items => {
-         this.setOptions(items, defaultSundayFirst);
-         document.body.classList.contains('popup') ? this.initPopup() : this.initMain();
+      document.body.classList.contains('popup') ? this.#initPopup() : this.#initMain();
+   }
+
+   // STATE MANAGEMENT
+
+   setState(newState) {
+      Object.assign(this.state, newState);
+      this.#updateUIComponents();
+   }
+
+   // PAGE INITIALIZERS
+
+   #initPopup() {
+      this.#setupGlobalEventListeners();
+      this.historyGetDay(this.#today);
+      this.dom.goHistory.addEventListener('click', this.openHistoryPage.bind(this));
+   }
+
+   #initMain() {
+      this.#refreshTime();
+      this.#setupMainElements();
+      this.#initCalendar();
+      this.#setupGlobalEventListeners();
+      this.historyGetDay(this.#today);
+   }
+
+   // EVENT LISTENER SETUP
+
+   #setupMainElements() {
+      this.#setupOptionButtons();
+      this.#setupSearch();
+
+      this.dom.goToday.addEventListener('click', evt => {
+         evt.preventDefault();
+         this.historyGetDay(this.#today);
+         this.#calendar?.selectDate();
       });
    }
 
-   getToday() {
-      return dayjs().startOf('day').toDate(); // Returns a Date object for 00:00:00 today
-   }
+   #setupGlobalEventListeners() {
+      this.dom.confirmButton.addEventListener('click', evt => {
+         evt.preventDefault();
+         this.#removeSelectedEntries();
+      });
 
-   refreshTime() {
-      this.now = new Date(); // Current time
-      this.today = this.getToday();
-   }
+      this.dom.cancelButton.addEventListener('click', evt => {
+         evt.preventDefault();
+         this.clearSelectedItems();
+      });
 
-   setOptions(items, defaultSundayFirst) {
-      this.options.use24HoursFormat = items.use24HoursFormat ?? true;
-      this.options.timeBeforeTitle = items.timeBeforeTitle ?? false;
-      this.options.sundayFirst = items.sundayFirst ?? defaultSundayFirst;
-      this.options.pageItems = +items.pageItems || 1000;
-   }
+      this.dom.contentContainer.addEventListener('click', this.#handleHistoryClick.bind(this));
 
-   // --- Popup Initialization ---
-   initPopup() {
-      this.historyGetDay(this.today);
-      this.setupHistoryEntryManager();
-      document.getElementById('go_history').addEventListener('click', this.openHistoryPage.bind(this));
-   }
-
-   openHistoryPage(e) {
-      e.preventDefault();
-      browser.runtime.sendMessage({ command: 'open-history-page' }, response => {
-         if (browser.runtime.lastError) {
-            console.error("Error sending message:", browser.runtime.lastError);
+      // Global Click. Deselect if click is outside relevant areas
+      document.addEventListener('click', ({ target }) => {
+         const S = Application.SELECTORS;
+         if (!target.closest(`${S.entry}, ${S.removeConfirmation}`)) {
+            this.clearSelectedItems();
          }
       });
+
+      document.addEventListener('keydown', this.#handleKeyDown.bind(this));
+      document.addEventListener('keyup', this.#handleKeyUp.bind(this));
    }
 
-   // --- Main Page Initialization ---
-   initMain() {
-      this.refreshTime();
-      this.setupMainElements();
-      this.initCalendar();
-      this.historyGetDay(this.today); // Initial view
-   }
-
-   setupMainElements() {
-      this.setupOptionButtons();
-      this.setupSearch();
-      this.setupHistoryEntryManager();
-
-      const goToday = document.getElementById('go_today');
-
-      goToday.addEventListener('click', e => {
-         e.preventDefault();
-         this.historyGetDay(this.today);
-         this.calendar?.selectToday();
-      });
-   }
-
-   setupOptionButtons() {
-      const goOptions = document.getElementById('go_options');
-      const optionsForm = document.getElementById('options-form');
-      const optionsCancel = document.getElementById('options_cancel');
-      const optionsClose = document.getElementById('options_close');
-      const modalOverlay = document.getElementById('modal_options');
-
-      goOptions.addEventListener('click', this.openOptions.bind(this));
-      optionsForm.addEventListener('submit', this.handleOptionsSubmit.bind(this));
-      optionsCancel.addEventListener('click', () => this.closeOptions());
-      optionsClose.addEventListener('click', () => this.closeOptions());
-
-      modalOverlay.addEventListener('click', evt => {
-         if (evt.target === evt.currentTarget) this.closeOptions();
-      });
-   }
-
-   setupSearch() {
-      const searchInput = document.getElementById('search_input');
-      const searchClear = document.getElementById('search_clear');
-      const searchContainer = searchInput.parentElement;
-
-      this.throttleSearch = this.debounce(this.historySearch, 500);
+   #setupSearch() {
+      const { searchInput, searchClear, searchContainer } = this.dom;
+      if (!searchInput) return;
 
       searchInput.addEventListener('focusin', () => searchContainer.classList.add('focus'));
       searchInput.addEventListener('focusout', () => searchContainer.classList.remove('focus'));
       searchInput.addEventListener('input', this.inputSearch.bind(this));
       // searchInput.addEventListener('change', this.inputSearch.bind(this)); // on input completion
 
-      searchClear.addEventListener('click', e => {
-         e.preventDefault();
+      searchClear.addEventListener('click', evt => {
+         evt.preventDefault();
          searchInput.value = '';
          searchInput.focus();
-         this.resetSearch();
-         searchClear.style.display = 'none';
+         this.#resetSearch();
       });
 
       searchClear.style.display = searchInput.value ? 'flex' : 'none';
       searchInput.focus();
    }
 
-   setupHistoryEntryManager() {
-      const clearConfirm = document.getElementById('clear_confirm');
-      const clearCancel = document.getElementById('clear_cancel');
+   #setupOptionButtons() {
+      const { goOptions, optionsModal } = this.dom;
 
-      clearConfirm.addEventListener('click', e => {
-         e.preventDefault();
-         this.removeSelectedEntries();
+      goOptions?.addEventListener('click', () => this.openOptions());
+
+      optionsModal?.addEventListener('close', () => {
+         if (optionsModal.returnValue === 'save') {
+            this.#saveOptions();
+         }
+      });
+      optionsModal.addEventListener('click', ({ target }) => {
+         if (target === optionsModal) optionsModal.close('cancel');
       });
 
-      clearCancel.addEventListener('click', e => {
-         e.preventDefault();
-         this.clearSelectedItems();
-      });
+      optionsModal?.addEventListener('cancel', optionsModal.close);
+   }
 
-      document.addEventListener('keydown', this.handleKeyDown.bind(this));
-      document.addEventListener('keyup', this.handleKeyUp.bind(this));
-      document.addEventListener('click', this.handleDocumentClick.bind(this));
+   // EVENT HANDLERS
+
+   openHistoryPage(evt) {
+      evt.preventDefault();
+      browser.runtime.sendMessage({ command: 'open-history-page' });
+   }
+
+   #handleHistoryClick(evt) {
+      const S = Application.SELECTORS;
+      const entryElement = evt.target.closest(S.entry);
+      if (!entryElement) return;
+
+      if (evt.target.closest(S.entryRemove)) {
+         evt.preventDefault();
+         evt.stopPropagation();
+         const linkHref = entryElement.querySelector(S.entryLink)?.href;
+         if (linkHref) this.#historyEntryDelete(linkHref, entryElement);
+         return;
+      }
+
+      if (evt.target.closest('a')) return;
+      evt.preventDefault();
+
+      const clickedUrl = entryElement.querySelector(S.entryLink)?.href;
+      if (!clickedUrl) return;
+
+      const { shiftPressed, controlPressed, multiSelectLastUrl, selectedUrls } = this.state;
+      const newSelectedUrls = new Set(selectedUrls);
+
+      // Shift + Click
+      if (shiftPressed && multiSelectLastUrl) {
+         const urlsToSelect = this.#multiSelectRange(clickedUrl);
+         urlsToSelect.forEach(url => newSelectedUrls.add(url));
+      }
+      // (Ctrl+) Click
+      else {
+         if (newSelectedUrls.has(clickedUrl)) {
+            newSelectedUrls.delete(clickedUrl);
+         } else {
+            newSelectedUrls.add(clickedUrl);
+         }
+      }
+
+      this.setState({
+         selectedUrls: newSelectedUrls,
+         multiSelectLastUrl: controlPressed && !newSelectedUrls.has(clickedUrl) ? multiSelectLastUrl : clickedUrl
+      });
    }
 
    // --- Keyboard Handling ---
-   handleKeyDown(e) {
-      if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.controlPressed = true;
-      else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftPressed = true;
-      else this.handleGlobalKeyPress(e);
+   #handleKeyDown(evt) {
+      if (evt.code === 'ControlLeft' || evt.code === 'ControlRight') this.setState({ controlPressed: true });
+      else if (evt.code === 'ShiftLeft' || evt.code === 'ShiftRight') this.setState({ shiftPressed: true });
+      else this.#handleGlobalKeyPress(evt);
    }
 
-   handleKeyUp(e) {
-      if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.controlPressed = false;
-      else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.shiftPressed = false;
+   #handleKeyUp(evt) {
+      if (evt.code === 'ControlLeft' || evt.code === 'ControlRight') this.setState({ controlPressed: false });
+      else if (evt.code === 'ShiftLeft' || evt.code === 'ShiftRight') this.setState({ shiftPressed: false });
    }
 
-   handleGlobalKeyPress(e) {
-      if (e.target.id === 'search_input') return; // Ignore typing in search
+   #handleGlobalKeyPress(evt) {
+      if (evt.target === this.dom.searchInput) return; // Ignore typing in search
 
-      // Use e.code for shortcuts
-      switch (e.code) {
+      // Use evt.code for shortcuts
+      switch (evt.code) {
          case 'KeyA': // Ctrl+A: Select all
-            if (this.controlPressed) {
-               e.preventDefault();
+            if (this.state.controlPressed) {
+               evt.preventDefault();
                this.selectAllEntries();
             }
             break;
          case 'Delete': // Delete selected
-            if (document.querySelector('.history-container .entry.selected')) {
-               this.showRemoveConfirmation();
+            if (this.state.selectedUrls.size > 0) {
+               this.#updateRemoveConfirmation();
             }
             break;
          case 'Escape': // Clear selection
@@ -204,33 +296,349 @@ class Application {
       }
    }
 
-   // --- Global Click ---
-   handleDocumentClick(e) {
-      // Deselect if click is outside relevant areas
-      if (!e.target.closest('.entry') && !e.target.closest('.remove-confirmation')) {
-         this.clearSelectedItems();
+   // DATA FETCHING & PROCESSING
+
+   // --- History Data Loading ---
+   historyGetDay(day, currentPage = 1) {
+      this.#refreshTime();
+
+      if (dayjs(day).isAfter(this.#now, 'day')) return;
+
+      this.setState({ currentDay: day, currentPage, isSearching: false, searchQuery: '' });
+      const dateStart = dayjs(day).startOf('day').toDate();
+      const dateEnd = dayjs(day).endOf('day').toDate();
+      this.#historyQuery('', dateStart, dateEnd);
+   }
+
+   #historySearch(query) {
+      this.#refreshTime();
+
+      this.setState({ isSearching: true, searchQuery: query, currentPage: 1 });
+      const dateStart = dayjs(0).toDate();
+      const dateEnd = dayjs(this.#today).endOf('day').toDate();
+      this.#historyQuery(query, dateStart, dateEnd);
+   }
+
+   async #historyQuery(search, start, end) {
+      this.setState({ isLoading: true });
+      try {
+         const results = await Application.#promisify(browser.history, 'search', {
+            text: search,
+            startTime: start.getTime(),
+            endTime: end.getTime(),
+            maxResults: Application.DEFAULTS.MAX_HISTORY_RESULTS,
+         });
+         this.#historyCallback(results, start, results.length);
+      } catch (error) {
+         console.error('History search error:', error);
+         this.#displayError('Failed to load history.');
+      } finally {
+         this.setState({ isLoading: false });
       }
    }
 
-   // --- Calendar ---
-   initCalendar() {
-      const calendarContainer = document.querySelector('.sidebar .nav .content');
-      const calendarElement = document.createElement('div');
-      calendarElement.classList.add('calendar');
-      calendarContainer.prepend(calendarElement);
+   #historyCallback(rawResults, targetDayStart, totalApiResults) {
+      const { pageItems } = this.options;
+      const { itemsToRender, totalForPagination } = this.state.isSearching
+         ? this.#handleSearchResults(rawResults, pageItems, totalApiResults)
+         : this.#handleDayView(rawResults, pageItems, targetDayStart);
 
-      if (typeof IonCalendar === 'undefined') {
-         console.error("IonCalendar class is not defined.");
+      this.#renderHistoryView(itemsToRender, totalForPagination);
+   }
+
+   #handleSearchResults(rawResults, itemsPerPage, totalApiResults) {
+      const pageResults = this.#paginateResults(rawResults, this.state.currentPage, itemsPerPage);
+      const groupedByDay = this.#groupResultsByDay(pageResults);
+
+      return {
+         itemsToRender: groupedByDay,
+         totalForPagination: totalApiResults,
+      };
+   }
+
+   #handleDayView(rawResults, itemsPerPage, targetDayStart) {
+      const targetMoment = dayjs(targetDayStart);
+      const filteredResults = rawResults.filter(result => dayjs(result.lastVisitTime).isSame(targetMoment, 'day'));
+      const pageResults = this.#paginateResults(filteredResults, this.state.currentPage, itemsPerPage);
+      const groupedByDay = this.#groupSingleDayResults(pageResults, targetMoment, filteredResults.length);
+
+      return {
+         itemsToRender: groupedByDay,
+         totalForPagination: filteredResults.length,
+      };
+   }
+
+   #paginateResults(items, currentPage, itemsPerPage) {
+      if (!items?.length || itemsPerPage <= 0 || currentPage <= 0) return [];
+
+      const pageIndex = currentPage - 1; // 0-based index
+      const startIndex = pageIndex * itemsPerPage;
+      return items.slice(startIndex, startIndex + itemsPerPage);
+   }
+
+   #groupResultsByDay(results) {
+      return results.reduce((acc, result) => {
+         const itemDayKey = Application.#getDayKey(result.lastVisitTime);
+         (acc[itemDayKey] = acc[itemDayKey] || []).push(result);
+         return acc;
+      }, {});
+   }
+
+   #groupSingleDayResults(pageResults, targetMoment, totalResultsForDay) {
+      const dayKey = Application.#getDayKey(targetMoment);
+      const grouped = {};
+
+      if (pageResults.length) {
+         grouped[dayKey] = pageResults;
+      } else if (this.state.currentPage === 1 && totalResultsForDay === 0) {
+         grouped[dayKey] = [];
+      }
+
+      return grouped;
+   }
+
+   // DATA MANIPULATION
+
+   async #historyEntryDelete(url, entryElement) {
+      const container = entryElement.parentElement;
+      entryElement.remove(); // Optimistic removal
+
+      try {
+         await Application.#promisify(browser.history, 'deleteUrl', { url });
+         if (container?.classList.contains('history-day') && !container.querySelector(Application.SELECTORS.entry)) {
+            const emptyMessage = `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`;
+            container.querySelector('h2')?.insertAdjacentHTML('afterend', emptyMessage);
+         }
+      } catch (error) {
+         console.error(`Error deleting URL: ${url}`, error);
+      } finally {
+         this.#updateRemoveConfirmation();
+      }
+   }
+
+   #removeSelectedEntries() {
+      this.state.selectedUrls.forEach(url => {
+         const entryElement = this.dom.contentContainer.querySelector(`.entry-link a[href="${CSS.escape(url)}"]`)?.closest('.entry');
+         if (entryElement) this.#historyEntryDelete(url, entryElement);
+      });
+      this.clearSelectedItems();
+   }
+
+   // RENDERING & DOM MANIPULATION
+
+   #renderHistoryView(items, totalResults) {
+      this.#clearContent();
+      const { contentContainer } = this.dom;
+
+      if (this.state.isSearching) {
+         const searchTitle = `<h1>${browser.i18n.getMessage('search_display')} '${Application.#escape(this.state.searchQuery)}'</h1>`;
+         const messageKey = totalResults > 0 ? 'search_found' : 'search_empty';
+         const searchMeta = `<div class="search-info">${browser.i18n.getMessage(messageKey, totalResults.toString())}</div>`;
+
+         this.dom.contentContainer?.insertAdjacentHTML('beforeend', `<div class="search-header">${searchTitle}${searchMeta}</div>`);
+      }
+
+      const sortedDays = Object.entries(items).sort(([keyA], [keyB]) => +keyB - +keyA);
+      const fragment = document.createDocumentFragment();
+
+      sortedDays.forEach(([k, dayEntries]) => {
+         const dayDiv = this.createDayElement(k, dayEntries, totalResults);
+         fragment.append(dayDiv);
+      });
+
+      contentContainer.append(fragment);
+
+      this.#insertPaginationControls(totalResults);
+
+      if (this.#lastScrollPosition > 0 && contentContainer.parentElement) {
+         contentContainer.parentElement.scrollTop = this.#lastScrollPosition;
+         this.#lastScrollPosition = 0;
+      }
+   }
+
+   #updateUIComponents() {
+      this.dom.historyContainer?.classList.toggle('is-loading', this.state.isLoading);
+      this.dom.historyContainer?.classList.toggle('is-searching', this.state.isSearching);
+
+      this.dom.contentContainer.querySelectorAll(Application.SELECTORS.entry).forEach(entryElement => {
+         const url = entryElement.querySelector(Application.SELECTORS.entryLink)?.href;
+         if (url) {
+            entryElement.classList.toggle('selected', this.state.selectedUrls.has(url));
+         }
+      });
+
+      this.#updateRemoveConfirmation();
+   }
+
+   createDayElement(dateKey, dayEntries, totalResults) {
+      const dayDiv = document.createElement('div');
+      dayDiv.className = 'history-day';
+      dayDiv.setAttribute('date', dateKey);
+
+      const date = dayjs(+dateKey).toDate();
+      // fix - https://github.com/iamkun/dayjs/issues/2860
+      // const dateFormat = browser.i18n.getMessage('date_format') || 'L';
+
+      const dayJsDate = dayjs(date);
+      const baseDateFormat = "dddd, MMMM";
+      const yearFormat = "YYYY";
+      let formattedDay;
+      try {
+         const dayNumber = dayJsDate.date();
+         const ordinalStringWithBrackets = dayJsDate.localeData().ordinal(dayNumber);
+         formattedDay = ordinalStringWithBrackets.replace(/^\[|\]$/g, '');
+      } catch (err) {
+         formattedDay = dayJsDate.format('D'); // Fallback
+      }
+      const finalFormattedDate = `${dayJsDate.format(baseDateFormat)} ${formattedDay}, ${dayJsDate.format(yearFormat)}`;
+      const pageCountDisplay = this.state.isSearching ? '' : this.#getPageCountDisplay(totalResults);
+
+      const h2 = document.createElement('h2');
+
+      if (this.state.isSearching) {
+         const dateLink = document.createElement('a');
+         dateLink.href = '#';
+         // dateLink.textContent = ${dayjs(date).format(dateFormat)};
+         dateLink.textContent = finalFormattedDate;
+         // end fix
+         dateLink.title = browser.i18n.getMessage('history_go_to_date_title') || `Go to ${finalFormattedDate}`;
+         dateLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.#calendar ? this.#calendar.selectDate(date) : this.historyGetDay(date);
+         });
+         h2.append(dateLink);
+      }
+      else {
+         h2.textContent = finalFormattedDate;
+      }
+
+      const pageCountSpan = document.createElement('span');
+      pageCountSpan.innerHTML = pageCountDisplay;
+
+      h2.append(pageCountSpan);
+      dayDiv.append(h2);
+
+      if (dayEntries.length) {
+         dayEntries.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
+         dayEntries.forEach(entry => {
+            dayDiv.insertAdjacentHTML('beforeend', this.#historyEntryFormat(entry));
+         });
+      }
+      else {
+         dayDiv.insertAdjacentHTML('beforeend', `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`);
+      }
+
+      return dayDiv;
+   }
+
+   #historyEntryFormat(entry) {
+      const timeFormat = this.options.use24HoursFormat ? 'HH:mm' : 'hh:mm A';
+      const time = dayjs(entry.lastVisitTime).format(timeFormat);
+
+      const originalUrl = entry.url;
+      let title = Application.#escape(entry.title || originalUrl);
+      const escapedDisplayUrl = Application.#escape(originalUrl);
+      const favicon = this.#getFavicon(originalUrl);
+      const { timeBeforeTitle } = this.options;
+
+      if (this.state.isSearching && this.state.searchQuery) {
+         const pattern = new RegExp(`(${this.#escapeRegExp(this.state.searchQuery)})`, 'gi');
+         title = title.replace(pattern, `<mark>$1</mark>`);
+      }
+
+      return `
+         <div class="entry">
+            ${timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
+            <img class="entry-icon" src="${favicon}" loading="lazy" alt=""/>
+            <div class="entry-link"><a href="${originalUrl}" target="_blank" title="${escapedDisplayUrl}">${title}</a></div>
+            ${!timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
+            <a href="#" class="entry-remove" title="${browser.i18n.getMessage('history_remove_single')}">✕</a>
+         </div>`;
+   }
+
+   #getPageCountDisplay(totalResults) {
+      const { pageItems } = this.options;
+      if (!totalResults || totalResults <= pageItems) return '';
+
+      const currentPage = this.state.currentPage;
+      const itemsShownSoFar = Math.min(currentPage * pageItems, totalResults);
+
+      // Return empty string if only one page, otherwise format page info
+      //    return totalPages <= 1
+      //       ? totalResults.toString()
+      //       // Show Page X / Y"
+      //       : browser.i18n.getMessage('pagination_page_info', [this.state.currentPage.toString(), totalPages.toString()]);
+
+      return `${itemsShownSoFar} / ${totalResults}`;
+   }
+
+   // --- Pagination & Scroll Restoration ---
+   #insertPaginationControls(totalResults) {
+      const { pageItems } = this.options;
+
+      this.dom.historyContainer.querySelector('.pagination')?.remove();
+
+      if (totalResults <= pageItems) return;
+
+      const totalPages = Math.ceil(totalResults / pageItems);
+      const paginationHTML = `
+         <div class="pagination">
+            <button id="${Application.SELECTORS.prevPageButton.slice(1)}" class="btn btn-secondary" ${this.state.currentPage <= 1 ? 'disabled' : ''}>
+               ${browser.i18n.getMessage('pagination_prev')}
+            </button>
+            <span class="page-info">${this.#getPageCountDisplay(totalResults)}</span>
+            <button id="${Application.SELECTORS.nextPageButton.slice(1)}" class="btn btn-secondary" ${this.state.currentPage >= totalPages ? 'disabled' : ''}>
+               ${browser.i18n.getMessage('pagination_next')}
+            </button>
+         </div>`;
+
+      this.dom.contentContainer.insertAdjacentHTML('afterend', paginationHTML);
+      this.#bindPaginationControls(totalResults);
+   }
+
+   #bindPaginationControls(totalResults) {
+      this.dom.prevPageButton = document.querySelector(Application.SELECTORS.prevPageButton);
+      this.dom.nextPageButton = document.querySelector(Application.SELECTORS.nextPageButton);
+
+      const handlePageChange = newPage => {
+         this.#lastScrollPosition = this.dom.historyContainer?.scrollTop || 0; // Save scroll position
+         this.setState({ currentPage: newPage });
+         this.#reloadCurrentView();
+      };
+
+      this.dom.prevPageButton?.addEventListener('click', () => {
+         if (this.state.currentPage > 1) handlePageChange(this.state.currentPage - 1);
+      });
+      this.dom.nextPageButton?.addEventListener('click', () => {
+         const totalPages = Math.ceil(totalResults / this.options.pageItems);
+         if (this.state.currentPage < totalPages) handlePageChange(this.state.currentPage + 1);
+      });
+   }
+
+   // UI COMPONENT LOGIC (Calendar, Options, Selection, etc.)
+
+   #initCalendar() {
+      if (!this.dom.sidebarNavContent) {
+         console.error('Calendar container not found or IonCalendar class is not defined');
          return;
       }
 
-      const todayForCalendar = dayjs(this.today);
+      const calendarElement = document.createElement('div');
+      calendarElement.classList.add('calendar');
+      this.dom.sidebarNavContent.prepend(calendarElement);
 
-      this.calendar = new IonCalendar(calendarElement, {
+      if (typeof IonCalendar === 'undefined') {
+         console.error('IonCalendar class is not defined');
+         return;
+      }
+
+      const todayForCalendar = dayjs(this.#today);
+
+      this.#calendar = new IonCalendar(calendarElement, {
          sundayFirst: this.options.sundayFirst,
          startDate: todayForCalendar,
          maxDate: todayForCalendar,
-         yearRange: `${this.now.getFullYear() - 3}-${this.now.getFullYear()}`,
+         yearRange: `${this.#now.getFullYear() - 3}-${this.#now.getFullYear()}`,
          format: 'dayjs',
          onClick: dateObject => {
             const date = dayjs.isDayjs(dateObject) ? dateObject.toDate() : dayjs(dateObject).toDate();
@@ -238,464 +646,273 @@ class Application {
                this.historyGetDay(date);
             }
             else {
-               console.error("Invalid date received from calendar onClick:", dateObject);
+               console.error('Invalid date received from calendar onClick:', dateObject);
             }
          }
       });
    }
 
-   getCurrentLocale() {
-      return browser.i18n.getMessage('language') || 'en';
+   // --- Options Modal ---
+   openOptions() {
+      const { optionsForm, optionsModal } = this.dom;
+      if (!optionsForm || !optionsModal) return;
+
+      optionsForm.elements['use24HoursFormat'].checked = this.options.use24HoursFormat;
+      optionsForm.elements['timeBeforeTitle'].checked = this.options.timeBeforeTitle;
+      optionsForm.elements['sundayFirst'].checked = this.options.sundayFirst;
+      optionsForm.elements['pageItems'].value = this.options.pageItems;
+
+      optionsModal.showModal();
    }
 
-   // --- Search ---
+   #saveOptions() {
+      const { optionsForm } = this.dom;
+      if (!optionsForm.checkValidity()) {
+         optionsForm.reportValidity();
+         return;
+      }
+
+      const formData = new FormData(optionsForm);
+      const oldSundayFirst = this.options.sundayFirst;
+      const settingsToSave = {
+         use24HoursFormat: formData.has('use24HoursFormat'),
+         timeBeforeTitle: formData.has('timeBeforeTitle'),
+         sundayFirst: formData.has('sundayFirst'),
+         pageItems: parseInt(formData.get('pageItems'), 10) || Application.DEFAULTS.PAGE_ITEMS,
+      };
+
+      browser.storage.sync.set(settingsToSave, () => {
+         if (browser.runtime.lastError) {
+            console.error('Error saving options:', browser.runtime.lastError);
+            // TODO: Notify user of save error
+         }
+         else {
+            this.options = { ...this.options, ...settingsToSave };
+
+            if (this.#calendar && this.options.sundayFirst !== oldSundayFirst) {
+               this.dom.calendar?.remove();
+               this.#calendar = null;
+               this.#initCalendar();
+            }
+
+            this.#reloadCurrentView();
+         }
+      });
+   }
+
+   clearSelectedItems() {
+      if (this.state.selectedUrls.size > 0) {
+         this.setState({ selectedUrls: new Set(), multiSelectLastUrl: null });
+      }
+   }
+
+   selectAllEntries() {
+      const entries = this.dom.contentContainer.querySelectorAll(Application.SELECTORS.entry);
+      const allUrls = new Set();
+      let lastUrl = null;
+
+      entries.forEach(entry => {
+         const url = entry.querySelector(Application.SELECTORS.entryLink)?.href;
+         if (url) {
+            allUrls.add(url);
+            lastUrl = url;
+         }
+      });
+
+      this.setState({
+         selectedUrls: allUrls,
+         multiSelectLastUrl: lastUrl
+      });
+   }
+
+   #multiSelectRange(endUrl) {
+      const { multiSelectLastUrl } = this.state;
+      const entries = Array.from(this.dom.contentContainer.querySelectorAll(Application.SELECTORS.entry));
+
+      const urlsInOrder = entries.map(entry => entry.querySelector(Application.SELECTORS.entryLink)?.href);
+
+      const startIndex = urlsInOrder.indexOf(multiSelectLastUrl);
+      const endIndex = urlsInOrder.indexOf(endUrl);
+
+      if (startIndex === -1 || endIndex === -1) {
+         console.warn('Multi-select failed: start or end entry not found in DOM list');
+         return [];
+      }
+
+      const [start, end] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+      return urlsInOrder.slice(start, end + 1);
+   }
+
+   // --- Remove Confirmation ---
+   #updateRemoveConfirmation() {
+      const { removeConfirmation } = this.dom;
+      if (!removeConfirmation) return;
+
+      const selectedCount = this.state.selectedUrls.size;
+      const numElement = removeConfirmation.querySelector('.num');
+
+      removeConfirmation.classList.toggle('is-visible', selectedCount > 0);
+      if (selectedCount > 0 && numElement) {
+         numElement.textContent = selectedCount.toString();
+      }
+   }
+
+   // SEARCH LOGIC
    inputSearch() {
-      const searchInput = document.getElementById('search_input');
-      const searchClear = document.getElementById('search_clear');
+      const { searchInput, searchClear } = this.dom;
       const searchQuery = searchInput.value;
 
       searchClear.style.display = searchQuery ? 'flex' : 'none';
 
       if (searchQuery) {
-         this.throttleSearch(searchQuery);
+         this.#throttleSearch(searchQuery);
       }
       else {
-         this.resetSearch();
+         this.#resetSearch();
       }
    }
 
-   resetSearch() {
-      this.throttleSearch?.cancel();
-      this.searchQuery = '';
-      this.isSearching = false;
-
-      const searchInput = document.getElementById('search_input');
-      if (searchInput) searchInput.value = '';
-      const searchClear = document.getElementById('search_clear');
-      if (searchClear) searchClear.style.display = 'none';
-
-      // Reload current day view. Avoids potential double load if reset was triggered by historyGetDay.
-      // Consider if this is always the desired behavior on reset.
-      this.historyGetDay(this.currentDay || this.today);
+   #resetSearch() {
+      this.#throttleSearch?.cancel();
+      this.setState({ isSearching: false, searchQuery: '' });
+      if (this.dom.searchInput) this.dom.searchInput.value = '';
+      if (this.dom.searchClear) this.dom.searchClear.style.display = 'none';
+      // TODO (UX): Instead of reloading the day view, consider just clearing the results.
+      this.historyGetDay(this.state.currentDay || this.#today);
    }
 
-   historySearch(query) {
-      this.refreshTime();
-      this.isSearching = true;
-      this.isLoading = true;
-      this.clearContent();
-      this.updateLoadingState();
-      this.searchQuery = query;
-      this.currentPage = 1;
-      const dateStart = dayjs(0).toDate();
-      const dateEnd = dayjs(this.today).endOf('day').toDate();
-      this.historyQuery(query, dateStart, dateEnd);
-   }
+   #highlightText(target, keyword) {
+      if (!target || !keyword) return;
 
-   // --- History Data Loading ---
-   historyGetDay(day, currentPage = 1) {
-      this.refreshTime();
-      const dayObj = dayjs(day);
+      const content = target.innerText;
+      const pattern = new RegExp(`(${this.#escapeRegExp(keyword)})`, 'gi');
 
-      if (dayObj.isAfter(this.now, 'day')) return; // Don't load future dates
-
-      this.currentDay = day instanceof Date ? day : dayObj.toDate();
-      this.currentPage = currentPage;
-
-      if (this.isSearching) {
-         this.resetSearch(); // This triggers its own historyGetDay
-         return;
-      }
-
-      const dateStart = dayObj.startOf('day').toDate();
-      const dateEnd = dayObj.endOf('day').toDate();
-      this.isLoading = true;
-      this.clearContent();
-      this.updateLoadingState();
-      this.historyQuery('', dateStart, dateEnd); // No search text for day view
-   }
-
-   historyQuery(search, start, end) {
-      this.isLoading = true;
-      this.updateLoadingState();
-
-      browser.history.search({
-         text: search,
-         startTime: start.getTime(),
-         endTime: end.getTime(),
-         maxResults: 10000
-      }, results => {
-         this.isLoading = false; // Set isLoading false before potential error display
-         this.updateLoadingState();
-
-         if (browser.runtime.lastError) {
-            console.error('History search error:', browser.runtime.lastError);
-            this.displayError('Failed to load history.');
-            return;
-         }
-
-         const totalApiResults = results.length;
-         this.historyCallback(results, start, totalApiResults);
-      });
-   }
-
-   historyCallback(rawResults, targetDayStart, totalApiResults) {
-      const { pageItems } = this.options;
-      const startIndex = (this.currentPage - 1) * pageItems;
-      let pageResults;
-      let itemsToRender = {};
-      let totalResultsForPagination;
-
-      if (this.isSearching) {
-         // Process search results
-         pageResults = rawResults.slice(startIndex, startIndex + pageItems);
-         itemsToRender = this.groupResultsByDay(pageResults);
-         totalResultsForPagination = totalApiResults;
-      }
-      else {
-         // Process single day view results
-         const targetDayMoment = dayjs(targetDayStart);
-         const filteredResults = rawResults.filter(result =>
-            dayjs(result.lastVisitTime).isSame(targetDayMoment, 'day')
-         );
-         totalResultsForPagination = filteredResults.length;
-         pageResults = filteredResults.slice(startIndex, startIndex + pageItems);
-         const dayKey = targetDayMoment.startOf('day').valueOf().toString();
-         if (pageResults.length > 0 || (this.currentPage === 1 && totalResultsForPagination === 0)) {
-            itemsToRender[dayKey] = pageResults;
-         }
-      }
-
-      const countOnPage = pageResults?.length ?? 0;
-      this.historyFormatDays(itemsToRender, totalResultsForPagination, countOnPage);
-   }
-
-   groupResultsByDay(results) {
-      return results.reduce((acc, result) => {
-         const itemKey = dayjs(result.lastVisitTime).startOf('day').valueOf().toString();
-         (acc[itemKey] = acc[itemKey] || []).push(result);
-         return acc;
-      }, {});
-   }
-
-   paginateResults(items, currentPage, itemsPerPage) {
-      if (!items || items.length === 0 || itemsPerPage <= 0) return [];
-
-      const pageIndex = currentPage - 1; // 0-based index
-      const startIndex = pageIndex * itemsPerPage;
-      // slice end index is exclusive, so startIndex + itemsPerPage is correct
-      return items.slice(startIndex, startIndex + itemsPerPage);
-   }
-
-   // --- Rendering ---
-   historyFormatDays(items, totalResults, countOnPage) {
-      this.clearContent();
-
-      if (this.isSearching) {
-         this.insertContent(`<h1>${browser.i18n.getMessage('search_display')} '${this.escape(this.searchQuery)}"</h1>`);
-         const messageKey = totalResults > 0 ? 'search_found' : 'search_empty';
-         this.insertContent(`<div class="search-result">${browser.i18n.getMessage(messageKey, totalResults.toString())}</div>`);
-      }
-
-      const sortedDays = Object.entries(items).sort(([keyA], [keyB]) => +keyB - +keyA);
-
-      const fragment = document.createDocumentFragment();
-
-      sortedDays.forEach(([k, dayEntries]) => {
-         const dayDiv = document.createElement('div');
-         dayDiv.className = 'history-day';
-         dayDiv.setAttribute('date', k);
-
-         const date = dayjs(+k).toDate();
-         // fix - https://github.com/iamkun/dayjs/issues/2860
-         // const dateFormat = browser.i18n.getMessage('date_format') || 'L';
-
-         const dayJsDate = dayjs(date);
-         const baseDateFormat = "dddd, MMMM";
-         const yearFormat = "YYYY";
-         let formattedDay;
-         try {
-            const dayNumber = dayJsDate.date();
-            const ordinalStringWithBrackets = dayJsDate.localeData().ordinal(dayNumber);
-            formattedDay = ordinalStringWithBrackets.replace(/^\[|\]$/g, '');
-         } catch (e) {
-            formattedDay = dayJsDate.format('D'); // Fallback
-         }
-         const finalFormattedDate = `${dayJsDate.format(baseDateFormat)} ${formattedDay}, ${dayJsDate.format(yearFormat)}`;
-         const pageCountDisplay = this.isSearching ? '' : this.getPageCountDisplay(totalResults);
-         dayDiv.innerHTML = `<h2>${finalFormattedDate}<span>${pageCountDisplay}</span></h2>`;
-         // dayDiv.innerHTML = `<h2>${dayjs(date).format(dateFormat)}<span>${pageCountDisplay}</span></h2>`;
-         // end fix
-
-         if (dayEntries.length) {
-            dayEntries.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
-            dayEntries.forEach(entry => {
-               dayDiv.insertAdjacentHTML('beforeend', this.historyEntryFormat(entry));
-            });
-         }
-         else {
-            dayDiv.insertAdjacentHTML('beforeend', `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`);
-         }
-         fragment.appendChild(dayDiv);
-      });
-
-      document.querySelector('.history-container .content').appendChild(fragment);
-
-      this.historyEntriesBind();
-      this.insertPaginationControls(totalResults);
-   }
-
-   getPageCountDisplay(totalResults) {
-      const { pageItems } = this.options;
-      if (!totalResults || totalResults <= this.options.pageItems) return '';
-
-      const itemsPerPage = pageItems;
-      const currentPage = this.currentPage;
-
-      const itemsShownSoFar = Math.min(currentPage * itemsPerPage, totalResults);
-
-      // Return empty string if only one page, otherwise format page info
-      //    return totalPages <= 1
-      //       ? totalResults.toString()
-      //       // Show Page X / Y"
-      //       : browser.i18n.getMessage('pagination_page_info', [this.currentPage.toString(), totalPages.toString()]);
-
-      return `${itemsShownSoFar} / ${totalResults}`;
-   }
-
-   historyEntryFormat(entry) {
-      const timeFormat = this.options.use24HoursFormat ? 'HH:mm' : 'hh:mm A';
-      const time = dayjs(entry.lastVisitTime).format(timeFormat);
-
-      const originalUrl = entry.url;
-      const escapedTitle = this.escape(entry.title || originalUrl);
-      const escapedDisplayUrl = this.escape(originalUrl);
-      const favicon = this.getFavicon(originalUrl);
-      const { timeBeforeTitle } = this.options;
-
-      return `
-         <div class="entry">
-            ${timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
-            <img class="entry-icon" src="${favicon}" loading="lazy" alt=""/>
-            <div class="entry-link"><a href="${originalUrl}" target="_blank" title="${escapedDisplayUrl}">${escapedTitle}</a></div>
-            ${!timeBeforeTitle ? `<div class="entry-time">${time}</div>` : ''}
-            <a href="#" class="entry-remove" title="${browser.i18n.getMessage('history_remove_single')}">✕</a>
-         </div>
-      `;
-   }
-
-   historyEntriesBind() {
-      document.querySelectorAll('.history-container .entry')
-         .forEach(entryElement => {
-            this.bindEntryRemoveButton(entryElement);
-            this.bindEntrySelection(entryElement);
-         });
-   }
-
-   bindEntryRemoveButton(entryElement) {
-      entryElement.querySelector('.entry-remove')?.addEventListener('click', e => {
-         e.preventDefault();
-         e.stopPropagation();
-         const linkHref = entryElement.querySelector('.entry-link a')?.href;
-         if (linkHref) {
-            this.historyEntryDelete(linkHref, entryElement);
-         }
-      });
-   }
-
-   historyEntryDelete(url, entryElement) {
-      const container = entryElement.parentElement;
-      entryElement.remove(); // Optimistic removal
-
-      browser.history.deleteUrl({ url: url }, () => {
-         if (browser.runtime.lastError) {
-            console.error(`Error deleting URL: ${url}`, browser.runtime.lastError);
-            // Consider restoring the element or notifying the user
-         }
-         else {
-            // Check if day container is empty after deletion
-            if (container?.classList.contains('history-day') && !container.querySelector('.entry')) {
-               const emptyMessage = `<div class="entry-empty">${browser.i18n.getMessage('history_date_empty')}</div>`;
-               container.querySelector('h2')?.insertAdjacentHTML('afterend', emptyMessage);
-            }
-            this.updateConfirm(); // Update selection count/panel
-         }
-      });
-   }
-
-   // --- Selection Logic ---
-   bindEntrySelection(entryElement) {
-      entryElement.addEventListener('click', e => {
-         if (e.target.closest('a')) return; // Ignore links
-         e.preventDefault();
-
-         const isSelected = entryElement.classList.contains('selected');
-
-         if (this.shiftPressed && this.multiSelectLastEntry) {
-            this.multiSelectRange(entryElement);
-         }
-         else if (this.controlPressed) {
-            entryElement.classList.toggle('selected');
-            this.multiSelectLastEntry = isSelected ? this.multiSelectLastEntry : entryElement; // Update last if selecting
-         }
-         else {
-            // document.querySelectorAll('.history-container .entry.selected') // Normal click: Clear others, select this one
-            //    .forEach(el => el.classList.remove('selected'));
-            entryElement.classList.add('selected');
-            this.multiSelectLastEntry = entryElement;
-         }
-         this.updateConfirm();
-      });
-   }
-
-   multiSelectRange(endEntry) {
-      const entries = Array.from(document.querySelectorAll('.history-container .entry'));
-      const startIndex = entries.indexOf(this.multiSelectLastEntry);
-      const endIndex = entries.indexOf(endEntry);
-
-      if (startIndex === -1 || endIndex === -1) return;
-
-      const [start, end] = startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
-      entries.slice(start, end + 1).forEach(entry => entry.classList.add('selected'));
-   }
-
-   selectAllEntries() {
-      const entries = document.querySelectorAll('.history-container .entry');
-      entries.forEach(entry => entry.classList.add('selected'));
-      // Set last selected to the actual last element in the list
-      this.multiSelectLastEntry = entries.length ? entries[entries.length - 1] : null;
-      this.updateConfirm();
-   }
-
-   clearSelectedItems() {
-      document.querySelectorAll('.history-container .entry.selected')
-         .forEach(entry => entry.classList.remove('selected'));
-      this.multiSelectLastEntry = null;
-      this.updateConfirm(); // Hide panel
-   }
-
-   // --- Remove Confirmation ---
-   showRemoveConfirmation() {
-      const removeConfirmation = document.querySelector('.remove-confirmation');
-      const selectedCount = document.querySelectorAll('.history-container .entry.selected').length;
-
-      if (selectedCount > 0) {
-         removeConfirmation.classList.add('is-visible');
-         const numElement = removeConfirmation.querySelector('.num');
-         if (numElement) numElement.textContent = selectedCount.toString();
+      if (content.match(pattern)) {
+         target.innerHTML = content.replace(pattern, `<mark>$1</mark>`);
       }
    }
 
-   updateConfirm() {
-      const removeConfirmation = document.querySelector('.remove-confirmation');
-      const selectedCount = document.querySelectorAll('.history-container .entry.selected').length;
-      const numElement = removeConfirmation.querySelector('.num');
+   // INTERNAL HELPERS & UTILITIES
 
-      removeConfirmation.classList.toggle('is-visible', selectedCount > 0);
-      if (selectedCount > 0) {
-         numElement.textContent = selectedCount.toString();
+   #cacheDOMElements() {
+      const S = Application.SELECTORS;
+      this.dom = {
+         // Containers
+         historyContainer: document.querySelector(S.historyContainer),
+         contentContainer: document.querySelector(S.contentContainer),
+         sidebarNavContent: document.querySelector(S.sidebarNavContent),
+
+         // Navigation
+         goToday: document.querySelector(S.goToday),
+         goHistory: document.querySelector(S.goHistory),
+         goOptions: document.querySelector(S.goOptions),
+
+         // Search
+         searchInput: document.querySelector(S.searchInput),
+         searchClear: document.querySelector(S.searchClear),
+
+         // Settings modal
+         optionsModal: document.querySelector(S.optionsModal),
+         optionsForm: document.querySelector(S.optionsForm),
+         optionsClose: document.querySelector(S.optionsClose),
+
+         // Delete confirmation modal
+         removeConfirmation: document.querySelector(S.removeConfirmation),
+         confirmButton: document.querySelector(S.confirmButton),
+         cancelButton: document.querySelector(S.cancelButton),
+      };
+
+      // Search container is optional
+      if (this.dom.searchInput) {
+         this.dom.searchContainer = this.dom.searchInput.closest(S.searchContainer);
+      }
+
+      // Pagination buttons are set dynamically
+      this.dom.prevPageButton = null;
+      this.dom.nextPageButton = null;
+   }
+
+   #refreshTime() {
+      this.#now = new Date(); // Current time
+      this.#today = Application.#getToday();
+   }
+
+   #setOptions(items, defaultSundayFirst) {
+      // this.options.use24HoursFormat = items.use24HoursFormat ?? true;
+      // this.options.timeBeforeTitle = items.timeBeforeTitle ?? false;
+      // this.options.sundayFirst = items.sundayFirst ?? defaultSundayFirst;
+      this.options.use24HoursFormat = (items.use24HoursFormat == null) ? true : items.use24HoursFormat;
+      this.options.timeBeforeTitle = (items.timeBeforeTitle == null) ? false : items.timeBeforeTitle;
+      this.options.sundayFirst = (items.sundayFirst == null) ? defaultSundayFirst : items.sundayFirst;
+      this.options.pageItems = +items.pageItems || 1000;
+   }
+
+   #reloadCurrentView() {
+      const { isSearching, searchQuery, currentDay } = this.state;
+      const queryParams = isSearching
+         ? { search: searchQuery, start: dayjs(0).toDate(), end: dayjs(this.#today).endOf('day').toDate() }
+         : { search: '', start: dayjs(currentDay || this.#today).startOf('day').toDate(), end: dayjs(currentDay || this.#today).endOf('day').toDate() };
+
+      this.#historyQuery(queryParams.search, queryParams.start, queryParams.end);
+   }
+
+   #getFavicon(url) {
+      try {
+         new URL(url); // Validate URL structure
+         // Use extension API (works in Chrome/Firefox within extension context)
+         return (typeof chrome !== 'undefined')
+            ? `chrome-extension://${browser.runtime.id}/_favicon/?size=16&pageUrl=${encodeURIComponent(Application.#escape(url))}` // chrome like
+            : `chrome://favicon/size/16@2x/${url}`; // Firefox
+      } catch (err) {
+         console.warn("Invalid URL for favicon:", url, err);
+         return '/icons/default_favicon.png'; // Path to default icon in extension
       }
    }
 
-   removeSelectedEntries() {
-      const selectedEntries = document.querySelectorAll('.history-container .entry.selected');
-      Array.from(selectedEntries).forEach(entryElement => {
-         const linkHref = entryElement.querySelector('.entry-link a')?.href;
-         if (linkHref) {
-            this.historyEntryDelete(linkHref, entryElement);
-         }
-      });
+   #clearContent() {
+      if (this.dom.contentContainer) this.dom.contentContainer.textContent = '';
    }
 
-   // --- Pagination ---
-   insertPaginationControls(totalResults) {
-      const { pageItems } = this.options;
-
-      if (totalResults <= pageItems) return;
-
-      const totalPages = Math.ceil(totalResults / pageItems);
-      const paginationHTML = `
-         <div class="pagination">
-            <button id="prev_page" class="btn btn-secondary" ${this.currentPage <= 1 ? 'disabled' : ''}>
-               ${browser.i18n.getMessage('pagination_prev')}
-            </button>
-            <span class="page-info">${this.getPageCountDisplay(totalResults)}</span>
-            <button id="next_page" class="btn btn-secondary" ${this.currentPage >= totalPages ? 'disabled' : ''}>
-               ${browser.i18n.getMessage('pagination_next')}
-            </button>
-         </div>`;
-      this.insertContent(paginationHTML);
-      this.bindPaginationControls(totalResults);
+   #displayError(message) {
+      this.#clearContent();
+      this.dom.contentContainer?.insertAdjacentHTML('beforeend', `<div class="error-message">${Application.#escape(message)}</div>`);
    }
 
-   bindPaginationControls(totalResults) {
-      const prevButton = document.getElementById('prev_page');
-      const nextButton = document.getElementById('next_page');
-      const totalPages = Math.ceil(totalResults / this.options.pageItems);
-
-      if (prevButton) {
-         prevButton.addEventListener('click', () => {
-            if (this.currentPage > 1) {
-               this.currentPage--;
-               this.reloadCurrentView(); // Load previous page
-            }
-         });
-      }
-
-      if (nextButton) {
-         nextButton.addEventListener('click', () => {
-            if (this.currentPage < totalPages) {
-               this.currentPage++;
-               this.reloadCurrentView(); // Load next page
-            }
-         });
-      }
+   // Return non-strings as is; basic HTML escaping for strings
+   #escapeRegExp(str) {
+      return str.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
    }
 
-   reloadCurrentView() {
-      this.isLoading = true;
-      this.clearContent();
-      this.updateLoadingState();
+   // --- Static Helpers ---
 
-      const queryParams = this.isSearching
-         ? { search: this.searchQuery, start: dayjs(0).toDate(), end: dayjs(this.today).endOf('day').toDate() }
-         : this.currentDay
-            ? { search: '', start: dayjs(this.currentDay).startOf('day').toDate(), end: dayjs(this.currentDay).endOf('day').toDate() }
-            : { search: '', start: dayjs(this.today).startOf('day').toDate(), end: dayjs(this.today).endOf('day').toDate() }; // Default to today
-
-      this.historyQuery(queryParams.search, queryParams.start, queryParams.end);
+   static #getToday() {
+      return dayjs().startOf('day').toDate(); // Returns a Date object for 00:00:00 today
    }
 
-   // --- Utilities ---
-   insertContent(html, context = null) {
-      (context || document.querySelector('.history-container .content'))?.insertAdjacentHTML('beforeend', html);
+   static #getDayKey(time) {
+      return dayjs(time).startOf('day').valueOf().toString();
    }
 
-   clearContent() {
-      const target = document.querySelector('.history-container .content');
-      if (target) target.innerHTML = '';
+   static #escape(string) {
+      return typeof string !== 'string' ? string : string
+         .replace(/</g, '&#x3C;')
+         .replace(/>/g, '&#x3E;')
+         .replace(/"/g, '&quot;')
+         .replace(/'/g, '&#039;');
    }
 
-   updateLoadingState() {
-      const container = document.querySelector('.history-container .content');
-      if (!container) return;
-      const loadingIndicatorClass = 'loading-indicator';
-      container.querySelector(`.${loadingIndicatorClass}`)?.remove();
-
-      if (this.isLoading) {
-         const indicator = document.createElement('div');
-         indicator.className = loadingIndicatorClass;
-         indicator.textContent = browser.i18n.getMessage('loading') || 'Loading...';
-         container.prepend(indicator);
-      }
+   static #debounce(func, wait) {
+      let timeout;
+      const debouncedFunction = function (...args) {
+         const context = this;
+         clearTimeout(timeout);
+         timeout = setTimeout(() => func.apply(context, args), wait);
+      };
+      debouncedFunction.cancel = () => clearTimeout(timeout);
+      return debouncedFunction;
    }
 
-   displayError(message) {
-      this.clearContent();
-      this.insertContent(`<div class="error-message">${this.escape(message)}</div>`);
-   }
-
-   i18n() {
+   static #i18n() {
       document.querySelectorAll('[i18n]').forEach(element => {
          const i18n = element.getAttribute('i18n');
          if (i18n.includes(':')) {
@@ -708,86 +925,17 @@ class Application {
       });
    }
 
-   getFavicon(url) {
-      try {
-         new URL(url); // Validate URL structure
-         // Use extension API (works in Chrome/Firefox within extension context)
-         return (typeof chrome !== 'undefined')
-            ? `chrome-extension://${browser.runtime.id}/_favicon/?size=16&pageUrl=${encodeURIComponent(this.escape(url))}` // chrome like
-            : `chrome://favicon/size/16@2x/${url}`; // Firefox
-      } catch (e) {
-         // console.warn("Invalid URL for favicon:", url, e);
-         return '/icons/default_favicon.png'; // Path to default icon in extension
-      }
+   static #getCurrentLocale() {
+      return browser.i18n.getMessage('language') || 'en';
    }
 
-   // --- Options Modal ---
-   handleOptionsSubmit(evt) {
-      evt.preventDefault();
-      const form = evt.target;
-
-      if (!form.checkValidity()) {
-         form.reportValidity();
-         return;
-      }
-
-      const formData = new FormData(form);
-      const settingsToSave = {
-         use24HoursFormat: formData.has('use24HoursFormat'),
-         timeBeforeTitle: formData.has('timeBeforeTitle'),
-         sundayFirst: formData.has('sundayFirst'),
-         pageItems: parseInt(formData.get('pageItems'), 10) || 1000
-      };
-
-      browser.storage.sync.set(settingsToSave, () => {
-         if (browser.runtime.lastError) {
-            console.error("Error saving options:", browser.runtime.lastError);
-            // TODO: Notify user of save error
-         }
-         else {
-            this.options = { ...this.options, ...settingsToSave };
-            this.closeOptions(true); // Close and reload
-         }
+   static #promisify(api, method, ...args) {
+      return new Promise((resolve, reject) => {
+         api[method](...args, result => {
+            if (browser.runtime.lastError) return reject(browser.runtime.lastError);
+            resolve(result);
+         });
       });
-   }
-
-   openOptions() {
-      const form = document.getElementById('options-form');
-      const modal = document.getElementById('modal_options');
-
-      form.elements['use24HoursFormat'].checked = this.options.use24HoursFormat;
-      form.elements['timeBeforeTitle'].checked = this.options.timeBeforeTitle;
-      form.elements['sundayFirst'].checked = this.options.sundayFirst;
-      form.elements['pageItems'].value = this.options.pageItems;
-
-      modal.style.display = 'flex';
-   }
-
-   closeOptions(reload = false) {
-      document.getElementById('modal_options').style.display = 'none';
-      if (reload) {
-         location.reload();
-      }
-   }
-
-   // --- Helpers ---
-   // Return non-strings as is; basic HTML escaping for strings
-   escape(string) {
-      return typeof string !== 'string' ? string : string
-         .replace(/</g, '&#x3C;')
-         .replace(/>/g, '&#x3E;')
-         .replace(/"/g, '&quot;')
-         .replace(/'/g, '&#039;');
-   }
-
-   debounce(func, wait) {
-      let timeout;
-      const debouncedFunction = function (...args) {
-         clearTimeout(timeout);
-         timeout = setTimeout(() => func.apply(this, args), wait);
-      };
-      debouncedFunction.cancel = () => clearTimeout(timeout);
-      return debouncedFunction;
    }
 }
 
