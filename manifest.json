@@ -2,7 +2,7 @@
    "manifest_version": 3,
    "name": "__MSG_application_title__",
    "description": "__MSG_application_description__",
-   "version": "1.32.2",
+   "version": "1.32.3",
    "default_locale": "en",
    "homepage_url": "https://github.com/raingart/Better-History",
    "icons": {
@@ -38,7 +38,7 @@
    "commands": {
       "open-history-page": {
          "suggested_key": "Ctrl+H",
-         "description": "Open history page"
+         "description": "__MSG_history_view_more__"
       }
    }
 }

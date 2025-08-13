@@ -8,7 +8,7 @@
    <meta name="viewport" content="width=device-width, initial-scale=1">
    <link rel="icon" type="image/x-icon" href="/icons/16.png">
 
-   <link rel="stylesheet" href="/css/application.css">
+   <link rel="stylesheet" href="/css/application.css" />
 
    <script src="/js/libs/browser-support.js" defer></script>
 
@@ -27,11 +27,6 @@
    <div class="wrapper">
       <main class="history-container">
 
-         <header>
-            <h1 i18n="history_recent"></h1>
-            <a i18n="history_view_more" id="go_history" title="Open a full history in a new tab"></a>
-         </header>
-
          <div class="gutter">
             <div class="remove-confirmation">
                <span class="num">0</span>
@@ -40,8 +35,12 @@
                <button i18n="btn_cancel" id="clear_cancel" class="btn btn-grey"></button>
             </div>
          </div>
-         <a i18n="history_view_more" id="go_history"></a>
-         <h1 i18n="history_recent"></h1>
+
+         <header>
+            <h1 i18n="history_recent"></h1>
+            <a i18n="history_view_more" id="go_history" title="Open a full history in a new tab"></a>
+         </header>
+
          <div class="content"></div>
       </main>
    </div>

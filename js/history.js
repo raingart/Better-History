@@ -913,14 +913,14 @@ class Application {
    }
 
    static #i18n() {
-      document.querySelectorAll('[i18n]').forEach(element => {
-         const i18n = element.getAttribute('i18n');
+      document.querySelectorAll('[i18n]').forEach(el => {
+         const i18n = el.getAttribute('i18n');
          if (i18n.includes(':')) {
             const [attr, message] = i18n.split(':');
-            element.setAttribute(attr, browser.i18n.getMessage(message));
+            el.setAttribute(attr, browser.i18n.getMessage(message));
          }
          else {
-            element.textContent = browser.i18n.getMessage(i18n);
+            el.textContent = browser.i18n.getMessage(i18n);
          }
       });
    }

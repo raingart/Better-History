@@ -10,25 +10,36 @@ body.popup {
       .history-container {
          padding: @spacing-lg;
 
-         h1 {
+         header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            background-color: @panel-background-color;
+            position: sticky;
+            top: 0;
+            padding: @spacing-sm;
+            margin-bottom: @spacing-sm;
+         }
+
+         h1 {
             font-size: @font-size-md;
-            margin-bottom: @spacing-md;
+            margin-bottom: 0;
          }
 
          h2 {
             display: none; // Hide day headers
          }
 
-         .remove-confirmation {
-            right: 20%; // not to overlap #go_history
+         .gutter {
+            z-index: 1; // overlap <header>
+
+            .remove-confirmation {
+               right: 25%; // not to overlap #go_history
+            }
+
          }
 
          #go_history {
             margin-left: auto;
-            font-size: @font-size-sm; // Smaller link text
          }
 
          .history-day {
@@ -37,7 +48,8 @@ body.popup {
          }
 
          .pagination {
-            display: none; // Hide pagination in popup
+            text-align: center;
+            padding: @spacing-md @spacing-md @spacing-sm;
          }
       }
    }
